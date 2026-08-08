@@ -1,0 +1,1654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Club Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg: #fafaf7;
+    --surface: #ffffff;
+    --border: #e8e6e0;
+    --border-strong: #d4d1c9;
+    --text: #1a1a17;
+    --text-muted: #6b6960;
+    --text-soft: #9a978e;
+    --accent: #2d4a3e;
+    --accent-hover: #223a30;
+    --success-bg: #e8f3ec;
+    --success-text: #1e6b3e;
+    --success-border: #c3dfcd;
+    --danger-bg: #fbeae6;
+    --danger-text: #a13420;
+    --danger-border: #f2c6bd;
+    --warning-bg: #fbf2dc;
+    --warning-text: #8a6a1a;
+    --info-bg: #e7eef6;
+    --info-text: #2c4e75;
+    --shadow-sm: 0 1px 2px rgba(20, 20, 15, 0.04);
+    --shadow-md: 0 4px 14px rgba(20, 20, 15, 0.06);
+    --radius: 6px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+
+  h1 { font-size: 28px; }
+  h2 { font-size: 22px; }
+  h3 { font-size: 17px; font-weight: 600; }
+
+  code, .mono {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 12px;
+  }
+
+  /* ---------- Layout ---------- */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .nav {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 32px;
+    height: 60px;
+  }
+
+  .brand {
+    font-family: "Fraunces", serif;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin-right: auto;
+  }
+  .brand em { font-style: italic; color: var(--accent); font-weight: 500; }
+
+  .nav-links { display: flex; gap: 4px; }
+
+  .nav-link {
+    background: none;
+    border: none;
+    font: inherit;
+    font-size: 13px;
+    color: var(--text-muted);
+    padding: 8px 14px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .nav-link:hover { background: var(--bg); color: var(--text); }
+  .nav-link.active { background: var(--text); color: var(--bg); }
+
+  .nav-count {
+    display: inline-block;
+    min-width: 18px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--danger-text);
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    text-align: center;
+    line-height: 1.4;
+  }
+
+  main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 32px;
+  }
+
+  .view-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  .view-header-inner h1 { margin-bottom: 4px; }
+  .view-header-inner p { color: var(--text-muted); margin: 0; }
+
+  /* ---------- Buttons ---------- */
+  button, .btn {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: var(--radius);
+    border: 1px solid transparent;
+    padding: 8px 14px;
+    transition: all 0.15s;
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+  button:hover, .btn:hover { background: var(--bg); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+  .btn-ghost {
+    background: none;
+    border-color: transparent;
+    color: var(--text-muted);
+  }
+  .btn-ghost:hover { color: var(--text); background: var(--bg); }
+
+  .btn-danger-ghost {
+    background: none;
+    border-color: transparent;
+    color: var(--danger-text);
+  }
+  .btn-danger-ghost:hover { background: var(--danger-bg); }
+
+  /* ---------- Cards ---------- */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+  }
+  .card-header {
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .card-body { padding: 22px; }
+
+  /* ---------- Tables ---------- */
+  .table-wrap { overflow-x: auto; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th {
+    text-align: left;
+    font-weight: 500;
+    color: var(--text-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 11px;
+    padding: 12px 22px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  td {
+    padding: 14px 22px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr.clickable { cursor: pointer; transition: background 0.1s; }
+  tbody tr.clickable:hover { background: var(--bg); }
+
+  /* ---------- Badges ---------- */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    letter-spacing: 0.02em;
+  }
+  .badge-active {
+    background: var(--success-bg);
+    color: var(--success-text);
+    border-color: var(--success-border);
+  }
+  .badge-unpaid {
+    background: var(--danger-bg);
+    color: var(--danger-text);
+    border-color: var(--danger-border);
+  }
+  .badge-pending {
+    background: var(--warning-bg);
+    color: var(--warning-text);
+    border-color: var(--warning-text);
+  }
+  .badge-role {
+    background: var(--info-bg);
+    color: var(--info-text);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .badge-neutral {
+    background: var(--bg);
+    color: var(--text-muted);
+    border-color: var(--border);
+  }
+  .badge-fam {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 9px;
+    border-radius: 999px;
+    color: white;
+    letter-spacing: 0.02em;
+  }
+
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  /* ---------- Forms ---------- */
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+  .form-grid .span-2 { grid-column: span 2; }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+  .field label .req { color: var(--danger-text); }
+
+  input, select, textarea {
+    font: inherit;
+    font-size: 13px;
+    padding: 8px 11px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    width: 100%;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(45, 74, 62, 0.1);
+  }
+  textarea { resize: vertical; min-height: 70px; font-family: inherit; }
+
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+  }
+  .checkbox-row input[type="checkbox"] { width: auto; margin: 0; }
+
+  .form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+    justify-content: flex-end;
+  }
+
+  /* ---------- Toolbar / filters ---------- */
+  .toolbar {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 14px 22px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .toolbar input[type="search"] {
+    max-width: 280px;
+    background: var(--surface);
+  }
+
+  /* ---------- Detail view ---------- */
+  .detail-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 800px) { .detail-grid { grid-template-columns: 1fr; } }
+
+  .field-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px 24px; }
+  .field-list .span-2 { grid-column: span 2; }
+  .field-list > div > label {
+    display: block;
+    font-size: 11px;
+    color: var(--text-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+  }
+  .field-list > div > .val { font-size: 14px; color: var(--text); }
+  .field-list > div > .val.muted { color: var(--text-muted); font-style: italic; }
+
+  .back-link {
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    margin-bottom: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .back-link:hover { color: var(--text); background: none; }
+
+  /* ---------- Fam roster ---------- */
+  .fam-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 18px;
+  }
+  @media (max-width: 1000px) { .fam-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 600px) { .fam-grid { grid-template-columns: 1fr; } }
+
+  .fam-column {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .fam-header {
+    padding: 16px 18px;
+    color: white;
+  }
+  .fam-header .fam-name {
+    font-family: "Fraunces", serif;
+    font-size: 20px;
+    font-weight: 500;
+  }
+  .fam-header .fam-count {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.85;
+    margin-top: 2px;
+  }
+  .fam-desc {
+    padding: 10px 18px;
+    font-size: 12px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .fam-members { flex: 1; }
+  .fam-member {
+    padding: 11px 18px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .fam-member:last-child { border-bottom: none; }
+  .fam-member:hover { background: var(--bg); }
+  .fam-member-name { font-weight: 500; font-size: 13px; margin-bottom: 3px; }
+  .fam-member-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .fam-empty { padding: 20px 18px; color: var(--text-soft); font-size: 13px; font-style: italic; text-align: center; }
+
+  /* ---------- Toast ---------- */
+  .toast-region {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 100;
+    pointer-events: none;
+  }
+  .toast {
+    background: var(--text);
+    color: white;
+    padding: 12px 18px;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+    font-size: 13px;
+    max-width: 360px;
+    pointer-events: auto;
+    animation: slideIn 0.2s ease-out;
+  }
+  .toast.success { background: var(--success-text); }
+  .toast.error { background: var(--danger-text); }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(16px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  /* ---------- Misc ---------- */
+  .empty-state {
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--text-soft);
+  }
+  .loading {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  .hidden { display: none !important; }
+  .error-banner {
+    background: var(--danger-bg);
+    color: var(--danger-text);
+    border: 1px solid var(--danger-border);
+    padding: 12px 16px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    margin-bottom: 18px;
+  }
+  .row-actions { display: flex; gap: 6px; }
+  .section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-soft);
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+  .stack { display: flex; flex-direction: column; gap: 20px; }
+</style>
+</head>
+<body>
+
+<!-- =========================================================
+     CONFIGURATION — Supabase credentials loaded from config.js
+     (gitignored; copy config.example.js to config.js and fill in)
+     ========================================================= -->
+<script src="config.js"></script>
+
+<header>
+  <nav class="nav">
+    <div class="brand">JSA <em>Admin</em></div>
+    <div class="nav-links">
+      <button class="nav-link" data-view="members">Members</button>
+      <button class="nav-link" data-view="fams">Fams</button>
+      <button class="nav-link" data-view="pending">Pending <span id="nav-pending-count" class="nav-count hidden"></span></button>
+      <button class="nav-link" data-view="add">Add member</button>
+    </div>
+  </nav>
+</header>
+
+<main>
+  <div id="view-members" class="view"></div>
+  <div id="view-detail" class="view hidden"></div>
+  <div id="view-add" class="view hidden"></div>
+  <div id="view-fams" class="view hidden"></div>
+  <div id="view-pending" class="view hidden"></div>
+</main>
+
+<div class="toast-region" id="toast-region"></div>
+
+<script>
+/* =====================================================================
+   Club Admin — single-file SPA
+   ===================================================================== */
+
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* ---------- Constants ---------- */
+const UNIVERSITY_YEARS = ["1st", "2nd", "3rd", "4th", "5+"];
+const GENDERS = ["male", "female", "other", "prefer_not_to_say"];
+const ROLES = ["member", "president", "vice_president", "vp_finance", "vp_operations", "vp_events", "vp_marketing", "vp_mentorship", "vp_careers"];
+const PLANS = ["semester_1", "semester_2", "full_year"];
+const PAYMENT_METHODS = ["venmo", "zelle", "cash"];
+const FAM_ROLES = ["member", "fam_leader", "co_leader"];
+const ASSIGNMENT_METHODS = ["selected", "requested", "transferred"];
+
+/* ---------- App state ---------- */
+const state = {
+  currentView: "members",
+  members: [],
+  fams: [],
+  academicPeriods: [],
+  famMemberships: [],   // current assignments only
+  membershipFees: [],
+  membershipPlans: [],  // price list: one row per plan per academic year
+  showAll: false,   // default list = is_active AND fee-active; toggle reveals everyone
+  searchQuery: "",
+  selectedMemberId: null,
+};
+
+/* ---------- Utilities ---------- */
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function todayISO() {
+  const d = new Date();
+  return d.toISOString().slice(0, 10);
+}
+
+function formatDate(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+function prettyLabel(str) {
+  if (!str) return "";
+  return String(str).replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// All IDs compared via String() so int / bigint / uuid columns all work,
+// whether the value originates from the DB (typed) or a DOM dataset (string).
+function idEq(a, b) {
+  return a != null && b != null && String(a) === String(b);
+}
+
+function isFeeActive(member) {
+  const today = todayISO();
+  const fees = state.membershipFees.filter((f) => idEq(f.member_id, member.member_id));
+  return fees.some((f) => f.status === "verified" && f.valid_until && f.valid_until >= today);
+}
+
+// Per-row status, evaluated in fixed order: rejected → pending → verified/expired.
+// Pending never shows as Expired, even if its dates have lapsed.
+function feeRowStatus(f) {
+  if (f.status === "rejected") return "rejected";
+  if (f.status === "pending") return "pending";
+  return f.valid_until && f.valid_until >= todayISO() ? "active" : "expired";
+}
+
+function feeStatusBadge(f) {
+  const s = feeRowStatus(f);
+  if (s === "rejected") return `<span class="badge badge-unpaid"><span class="dot"></span>Rejected</span>`;
+  if (s === "pending") return `<span class="badge badge-pending"><span class="dot"></span>Pending</span>`;
+  if (s === "active") return `<span class="badge badge-active"><span class="dot"></span>Verified</span>`;
+  return `<span class="badge badge-neutral">Expired</span>`;
+}
+
+function getCurrentFam(memberId) {
+  const fm = state.famMemberships.find((f) => idEq(f.member_id, memberId) && f.is_current);
+  if (!fm) return null;
+  const fam = state.fams.find((x) => idEq(x.fam_id, fm.fam_id));
+  return fam ? { ...fam, fam_role: fm.fam_role } : null;
+}
+
+function toast(message, type = "success") {
+  const region = $("#toast-region");
+  const el = document.createElement("div");
+  el.className = `toast ${type}`;
+  el.textContent = message;
+  region.appendChild(el);
+  setTimeout(() => {
+    el.style.transition = "opacity 0.3s";
+    el.style.opacity = "0";
+    setTimeout(() => el.remove(), 300);
+  }, 3200);
+}
+
+function showError(err, context) {
+  console.error(context, err);
+  const msg = err?.message || err?.error_description || String(err);
+  toast(`${context}: ${msg}`, "error");
+}
+
+/* ---------- Data loading ---------- */
+async function loadAll() {
+  try {
+    const [m, f, ap, fm, mf, mp] = await Promise.all([
+      db.from("members").select("*").order("last_name"),
+      db.from("fams").select("*").order("name"),
+      db.from("academic_periods").select("*").order("start_date"),
+      db.from("fam_memberships").select("*"),
+      db.from("membership_fees").select("*").order("paid_date", { ascending: false }),
+      db.from("membership_plans").select("*"),
+    ]);
+    if (m.error) throw m.error;
+    if (f.error) throw f.error;
+    if (ap.error) throw ap.error;
+    if (fm.error) throw fm.error;
+    if (mf.error) throw mf.error;
+    if (mp.error) throw mp.error;
+
+    state.members = m.data || [];
+    state.fams = f.data || [];
+    state.academicPeriods = ap.data || [];
+    state.famMemberships = fm.data || [];
+    state.membershipFees = mf.data || [];
+    state.membershipPlans = mp.data || [];
+    updatePendingCount();
+  } catch (err) {
+    showError(err, "Failed to load data");
+    throw err;
+  }
+}
+
+function updatePendingCount() {
+  const n = state.membershipFees.filter((f) => f.status === "pending").length;
+  const el = $("#nav-pending-count");
+  el.textContent = n;
+  el.classList.toggle("hidden", n === 0);
+}
+
+/* ---------- View router ---------- */
+function setView(view, params = {}) {
+  state.currentView = view;
+  if (view === "detail") state.selectedMemberId = params.memberId;
+
+  $$(".view").forEach((v) => v.classList.add("hidden"));
+  const viewId = view === "detail" ? "view-detail" : `view-${view}`;
+  const el = $(`#${viewId}`);
+  if (el) el.classList.remove("hidden");
+
+  $$(".nav-link").forEach((b) => {
+    b.classList.toggle("active", b.dataset.view === (view === "detail" ? "members" : view));
+  });
+
+  if (view === "members") renderMembers();
+  else if (view === "detail") renderDetail();
+  else if (view === "add") renderAddForm();
+  else if (view === "fams") renderFams();
+  else if (view === "pending") renderPending();
+}
+
+/* =====================================================================
+   VIEW: Members list
+   ===================================================================== */
+function renderMembers() {
+  const root = $("#view-members");
+  const q = state.searchQuery.toLowerCase().trim();
+  let rows = state.members.slice();
+  if (!state.showAll) rows = rows.filter((m) => m.is_active && isFeeActive(m));
+  if (q) {
+    rows = rows.filter((m) =>
+      [m.first_name, m.last_name, m.email, m.discord_username, m.student_id, m.role]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q))
+    );
+  }
+  rows.sort((a, b) => (a.last_name || "").localeCompare(b.last_name || ""));
+
+  root.innerHTML = `
+    <div class="view-header">
+      <div class="view-header-inner">
+        <h1>Members</h1>
+        <p>${rows.length} member${rows.length === 1 ? "" : "s"}${state.showAll ? " (all)" : " (active, paid)"}</p>
+      </div>
+      <button class="btn-primary" id="btn-add-top">+ Add member</button>
+    </div>
+    <div class="card">
+      <div class="toolbar">
+        <input type="search" id="search" placeholder="Search by name, email, discord, role…" value="${escapeHtml(state.searchQuery)}" />
+        <label class="checkbox-row">
+          <input type="checkbox" id="toggle-inactive" ${state.showAll ? "checked" : ""} />
+          Show all members
+        </label>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Student ID</th>
+              <th>Discord</th>
+              <th>Year</th>
+              <th>Role</th>
+              <th>Fam</th>
+              <th>Fee status</th>
+              <th>Active</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.length === 0 ? `
+              <tr><td colspan="8" class="empty-state">No members match.</td></tr>
+            ` : rows.map(renderMemberRow).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  $("#btn-add-top").addEventListener("click", () => setView("add"));
+  $("#search").addEventListener("input", (e) => {
+    state.searchQuery = e.target.value;
+    renderMembers();
+    $("#search").focus();
+    const val = e.target.value;
+    $("#search").setSelectionRange(val.length, val.length);
+  });
+  $("#toggle-inactive").addEventListener("change", (e) => {
+    state.showAll = e.target.checked;
+    renderMembers();
+  });
+  $$("#view-members tbody tr.clickable").forEach((row) => {
+    row.addEventListener("click", () => setView("detail", { memberId: row.dataset.id }));
+  });
+}
+
+function renderMemberRow(m) {
+  const fam = getCurrentFam(m.member_id);
+  const feeActive = isFeeActive(m);
+  return `
+    <tr class="clickable" data-id="${m.member_id}">
+      <td>
+        <div style="font-weight:500;">${escapeHtml(m.first_name)} ${escapeHtml(m.last_name)}</div>
+        <div style="color:var(--text-soft); font-size:12px;">${escapeHtml(m.email || "")}</div>
+      </td>
+      <td>${m.student_id ? `<span class="mono">${escapeHtml(m.student_id)}</span>` : `<span style="color:var(--text-soft); font-size:12px;">—</span>`}</td>
+      <td>${m.discord_username ? `<span class="mono">${escapeHtml(m.discord_username)}</span>` : `<span style="color:var(--text-soft); font-size:12px;">—</span>`}</td>
+      <td>${escapeHtml(m.university_year || "—")}</td>
+      <td><span class="badge badge-role">${escapeHtml(prettyLabel(m.role))}</span></td>
+      <td>${fam
+        ? `<span class="badge-fam" style="background:${escapeHtml(fam.color)}">${escapeHtml(fam.name)}</span>`
+        : `<span style="color:var(--text-soft); font-size:12px;">—</span>`}</td>
+      <td>${feeActive
+        ? `<span class="badge badge-active"><span class="dot"></span>Active</span>`
+        : `<span class="badge badge-unpaid"><span class="dot"></span>Unpaid</span>`}</td>
+      <td>${m.is_active
+        ? `<span style="color:var(--text-muted); font-size:12px;">Yes</span>`
+        : `<span style="color:var(--text-soft); font-size:12px;">No</span>`}</td>
+    </tr>
+  `;
+}
+
+/* =====================================================================
+   VIEW: Member detail
+   ===================================================================== */
+function renderDetail() {
+  const root = $("#view-detail");
+  const m = state.members.find((x) => idEq(x.member_id, state.selectedMemberId));
+  if (!m) {
+    root.innerHTML = `<div class="empty-state">Member not found.</div>`;
+    return;
+  }
+  const fam = getCurrentFam(m.member_id);
+  const feeActive = isFeeActive(m);
+  const fees = state.membershipFees
+    .filter((f) => idEq(f.member_id, m.member_id))
+    .sort((a, b) => (b.paid_date || "").localeCompare(a.paid_date || ""));
+
+  root.innerHTML = `
+    <button class="back-link" id="btn-back">← Back to members</button>
+    <div class="view-header">
+      <div class="view-header-inner">
+        <h1>${escapeHtml(m.first_name)} ${escapeHtml(m.last_name)}</h1>
+        <p>
+          ${feeActive
+            ? `<span class="badge badge-active"><span class="dot"></span>Fee active</span>`
+            : `<span class="badge badge-unpaid"><span class="dot"></span>Fee unpaid</span>`}
+          ${fam ? `<span class="badge-fam" style="background:${escapeHtml(fam.color)}; margin-left:8px;">${escapeHtml(fam.name)} · ${escapeHtml(prettyLabel(fam.fam_role))}</span>` : ""}
+        </p>
+      </div>
+      <div class="row-actions">
+        <button id="btn-edit">Edit member</button>
+        <button class="btn-primary" id="btn-payment">Record payment</button>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div id="edit-slot"></div>
+      <div id="payment-slot"></div>
+
+      <div class="card">
+        <div class="card-header"><h3>Member details</h3></div>
+        <div class="card-body">
+          <div class="field-list">
+            ${detailItem("First name", m.first_name)}
+            ${detailItem("Last name", m.last_name)}
+            ${detailItem("Email", m.email)}
+            ${detailItem("Student ID", m.student_id)}
+            ${detailItem("Discord username", m.discord_username)}
+            ${detailItem("Gender", prettyLabel(m.gender))}
+            ${detailItem("University year", m.university_year)}
+            ${detailItem("Role", prettyLabel(m.role))}
+            ${detailItem("Joined", formatDate(m.joined_date))}
+            ${detailItem("Active", m.is_active ? "Yes" : "No")}
+            <div class="span-2">
+              <label>Notes</label>
+              <div class="val ${m.notes ? "" : "muted"}">${m.notes ? escapeHtml(m.notes) : "No notes"}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3>Payment history</h3>
+          <span style="color:var(--text-soft); font-size:12px;">${fees.length} record${fees.length === 1 ? "" : "s"}</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Paid date</th>
+                <th>Academic year</th>
+                <th>Plan</th>
+                <th>Amount</th>
+                <th>Method</th>
+                <th>Valid from</th>
+                <th>Valid until</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${fees.length === 0
+                ? `<tr><td colspan="8" class="empty-state">No payments recorded.</td></tr>`
+                : fees.map(renderFeeRow).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+
+  $("#btn-back").addEventListener("click", () => setView("members"));
+  $("#btn-edit").addEventListener("click", () => renderEditForm(m));
+  $("#btn-payment").addEventListener("click", () => renderPaymentForm(m));
+}
+
+function detailItem(label, value) {
+  const empty = value === null || value === undefined || value === "";
+  return `
+    <div>
+      <label>${escapeHtml(label)}</label>
+      <div class="val ${empty ? "muted" : ""}">${empty ? "—" : escapeHtml(value)}</div>
+    </div>
+  `;
+}
+
+function renderFeeRow(f) {
+  return `
+    <tr>
+      <td>${formatDate(f.paid_date)}</td>
+      <td class="mono">${escapeHtml(f.academic_year)}</td>
+      <td>${escapeHtml(prettyLabel(f.plan))}</td>
+      <td>$${Number(f.amount_paid || 0).toFixed(2)}</td>
+      <td>${escapeHtml(prettyLabel(f.payment_method))}</td>
+      <td>${formatDate(f.valid_from)}</td>
+      <td>${formatDate(f.valid_until)}</td>
+      <td>${feeStatusBadge(f)}</td>
+    </tr>
+  `;
+}
+
+/* ---------- Edit member form (inline) ---------- */
+function renderEditForm(m) {
+  const slot = $("#edit-slot");
+  const fam = getCurrentFam(m.member_id);
+  slot.innerHTML = `
+    <div class="card">
+      <div class="card-header"><h3>Edit member</h3></div>
+      <div class="card-body">
+        <form id="edit-form">
+          <div class="form-grid">
+            <div class="field">
+              <label>First name <span class="req">*</span></label>
+              <input name="first_name" required value="${escapeHtml(m.first_name || "")}" />
+            </div>
+            <div class="field">
+              <label>Last name <span class="req">*</span></label>
+              <input name="last_name" required value="${escapeHtml(m.last_name || "")}" />
+            </div>
+            <div class="field span-2">
+              <label>Email <span class="req">*</span></label>
+              <input name="email" type="email" required value="${escapeHtml(m.email || "")}" />
+            </div>
+            <div class="field">
+              <label>Student ID</label>
+              <input name="student_id" value="${escapeHtml(m.student_id || "")}" />
+            </div>
+            <div class="field">
+              <label>Discord username</label>
+              <input name="discord_username" value="${escapeHtml(m.discord_username || "")}" />
+            </div>
+            <div class="field">
+              <label>Gender</label>
+              <select name="gender">${GENDERS.map((g) => `<option value="${g}" ${m.gender === g ? "selected" : ""}>${prettyLabel(g)}</option>`).join("")}</select>
+            </div>
+            <div class="field">
+              <label>University year</label>
+              <select name="university_year">${UNIVERSITY_YEARS.map((y) => `<option value="${y}" ${m.university_year === y ? "selected" : ""}>${y}</option>`).join("")}</select>
+            </div>
+            <div class="field">
+              <label>Role</label>
+              <select name="role">${ROLES.map((r) => `<option value="${r}" ${m.role === r ? "selected" : ""}>${prettyLabel(r)}</option>`).join("")}</select>
+            </div>
+            <div class="field">
+              <label>Joined date</label>
+              <input name="joined_date" type="date" value="${m.joined_date || ""}" />
+            </div>
+            <div class="field">
+              <label>Fam assignment</label>
+              <select name="fam_id">
+                <option value="">— None —</option>
+                ${state.fams.map((f) => `<option value="${f.fam_id}" ${fam && idEq(fam.fam_id, f.fam_id) ? "selected" : ""}>${escapeHtml(f.name)}</option>`).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label>Fam role</label>
+              <select name="fam_role">${FAM_ROLES.map((r) => `<option value="${r}" ${fam && fam.fam_role === r ? "selected" : ""}>${prettyLabel(r)}</option>`).join("")}</select>
+            </div>
+            <div class="field span-2">
+              <label>Notes</label>
+              <textarea name="notes">${escapeHtml(m.notes || "")}</textarea>
+            </div>
+            <div class="field span-2">
+              <label class="checkbox-row">
+                <input type="checkbox" name="is_active" ${m.is_active ? "checked" : ""} />
+                Member is active
+              </label>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn-ghost" id="edit-cancel">Cancel</button>
+            <button type="submit" class="btn-primary" id="edit-submit">Save changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+  slot.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  $("#edit-cancel").addEventListener("click", () => (slot.innerHTML = ""));
+  $("#edit-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = $("#edit-submit");
+    btn.disabled = true;
+    btn.textContent = "Saving…";
+    try {
+      const fd = new FormData(e.target);
+      const updates = {
+        first_name: fd.get("first_name").trim(),
+        last_name: fd.get("last_name").trim(),
+        email: fd.get("email").trim(),
+        student_id: fd.get("student_id").trim() || null,
+        discord_username: fd.get("discord_username").trim() || null,
+        gender: fd.get("gender"),
+        university_year: fd.get("university_year"),
+        role: fd.get("role"),
+        joined_date: fd.get("joined_date") || null,
+        notes: fd.get("notes").trim() || null,
+        is_active: fd.get("is_active") === "on",
+      };
+      const { error: upErr } = await db.from("members").update(updates).eq("member_id", m.member_id);
+      if (upErr) throw upErr;
+
+      // Fam assignment change
+      const newFamId = fd.get("fam_id") || null;
+      const newFamRole = fd.get("fam_role");
+      const currentFm = state.famMemberships.find((f) => idEq(f.member_id, m.member_id) && f.is_current);
+
+      if (newFamId && (!currentFm || !idEq(currentFm.fam_id, newFamId))) {
+        // Close current
+        if (currentFm) {
+          const { error } = await db.from("fam_memberships").update({ is_current: false }).eq("fam_membership_id", currentFm.fam_membership_id);
+          if (error) throw error;
+        }
+        // Add new
+        const { error } = await db.from("fam_memberships").insert({
+          member_id: m.member_id,
+          fam_id: newFamId,
+          joined_date: todayISO(),
+          fam_role: newFamRole,
+          assignment_method: "transferred",
+          is_current: true,
+        });
+        if (error) throw error;
+      } else if (!newFamId && currentFm) {
+        const { error } = await db.from("fam_memberships").update({ is_current: false }).eq("fam_membership_id", currentFm.fam_membership_id);
+        if (error) throw error;
+      } else if (currentFm && currentFm.fam_role !== newFamRole) {
+        const { error } = await db.from("fam_memberships").update({ fam_role: newFamRole }).eq("fam_membership_id", currentFm.fam_membership_id);
+        if (error) throw error;
+      }
+
+      await loadAll();
+      toast("Member updated", "success");
+      renderDetail();
+    } catch (err) {
+      showError(err, "Update failed");
+      btn.disabled = false;
+      btn.textContent = "Save changes";
+    }
+  });
+}
+
+/* ---------- Record payment form ---------- */
+function renderPaymentForm(m) {
+  const slot = $("#payment-slot");
+  const today = todayISO();
+  const years = [...new Set(state.academicPeriods.map((p) => p.academic_year))].sort().reverse();
+  // Determine a sensible default academic year: one whose end is closest to today
+  const currentYear = years.find((y) => {
+    const sem2 = state.academicPeriods.find((p) => p.academic_year === y && p.semester === 2);
+    return sem2 && sem2.end_date >= today;
+  }) || years[0];
+
+  slot.innerHTML = `
+    <div class="card">
+      <div class="card-header"><h3>Record payment</h3></div>
+      <div class="card-body">
+        <form id="payment-form">
+          <div class="form-grid">
+            <div class="field">
+              <label>Academic year <span class="req">*</span></label>
+              <select name="academic_year" required>
+                ${years.length === 0 ? `<option value="">(no periods defined)</option>` : years.map((y) => `<option value="${y}" ${y === currentYear ? "selected" : ""}>${escapeHtml(y)}</option>`).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label>Plan <span class="req">*</span></label>
+              <select name="plan" required>${PLANS.map((p) => `<option value="${p}">${prettyLabel(p)}</option>`).join("")}</select>
+            </div>
+            <div class="field">
+              <label>Amount paid <span class="req">*</span></label>
+              <input name="amount_paid" type="number" step="0.01" min="0" required />
+            </div>
+            <div class="field">
+              <label>Payment method <span class="req">*</span></label>
+              <select name="payment_method" required>${PAYMENT_METHODS.map((p) => `<option value="${p}">${prettyLabel(p)}</option>`).join("")}</select>
+            </div>
+            <div class="field">
+              <label>Paid date <span class="req">*</span></label>
+              <input name="paid_date" type="date" required value="${today}" />
+            </div>
+            <div class="field">
+              <label>Computed validity</label>
+              <div class="val mono" id="validity-preview" style="padding-top:8px; color:var(--text-muted); font-size:12px;">—</div>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn-ghost" id="payment-cancel">Cancel</button>
+            <button type="submit" class="btn-primary" id="payment-submit">Record payment</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+  slot.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  const form = $("#payment-form");
+  const preview = $("#validity-preview");
+
+  function updatePreview() {
+    const fd = new FormData(form);
+    const dates = computeValidity(fd.get("academic_year"), fd.get("plan"));
+    if (!dates) {
+      preview.textContent = "No matching academic period";
+      preview.style.color = "var(--danger-text)";
+    } else {
+      preview.textContent = `${dates.valid_from} → ${dates.valid_until}`;
+      preview.style.color = "var(--text-muted)";
+    }
+  }
+  function fillDefaultAmount() {
+    const fd = new FormData(form);
+    const price = planPrice(fd.get("academic_year"), fd.get("plan"), fd.get("paid_date"));
+    if (price !== null) form.elements.amount_paid.value = price.toFixed(2);
+  }
+  updatePreview();
+  fillDefaultAmount();
+  form.addEventListener("change", (e) => {
+    updatePreview();
+    if (["academic_year", "plan", "paid_date"].includes(e.target.name)) fillDefaultAmount();
+  });
+
+  $("#payment-cancel").addEventListener("click", () => (slot.innerHTML = ""));
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = $("#payment-submit");
+    btn.disabled = true;
+    btn.textContent = "Saving…";
+    try {
+      const fd = new FormData(form);
+      const academic_year = fd.get("academic_year");
+      const plan = fd.get("plan");
+      const dates = computeValidity(academic_year, plan);
+      if (!dates) throw new Error("No academic period matches that year/plan. Add one in the academic_periods table.");
+      const row = {
+        member_id: m.member_id,
+        academic_year,
+        plan,
+        amount_paid: Number(fd.get("amount_paid")),
+        paid_date: fd.get("paid_date"),
+        payment_method: fd.get("payment_method"),
+        valid_from: dates.valid_from,
+        valid_until: dates.valid_until,
+        status: "verified",   // treasurer records the payment directly — no pending step
+      };
+      const { error } = await db.from("membership_fees").insert(row);
+      if (error) throw error;
+      await loadAll();
+      toast("Payment recorded", "success");
+      renderDetail();
+    } catch (err) {
+      showError(err, "Payment failed");
+      btn.disabled = false;
+      btn.textContent = "Record payment";
+    }
+  });
+}
+
+// Price list lookup — returns null if no membership_plans row exists for the
+// pair. Late pricing keys off the actual paid date (not verification time):
+// paid_date >= late_from → late_price.
+function planPrice(academicYear, plan, paidDate) {
+  const row = state.membershipPlans.find((p) => p.academic_year === academicYear && p.plan === plan);
+  if (!row) return null;
+  const late = row.late_from && row.late_price != null && paidDate && paidDate >= row.late_from;
+  return Number(late ? row.late_price : row.price);
+}
+
+function computeValidity(academicYear, plan) {
+  const sem1 = state.academicPeriods.find((p) => p.academic_year === academicYear && p.semester === 1);
+  const sem2 = state.academicPeriods.find((p) => p.academic_year === academicYear && p.semester === 2);
+  if (plan === "semester_1") {
+    if (!sem1) return null;
+    return { valid_from: sem1.start_date, valid_until: sem1.end_date };
+  }
+  if (plan === "semester_2") {
+    if (!sem2) return null;
+    return { valid_from: sem2.start_date, valid_until: sem2.end_date };
+  }
+  if (plan === "full_year") {
+    if (!sem1 || !sem2) return null;
+    return { valid_from: sem1.start_date, valid_until: sem2.end_date };
+  }
+  return null;
+}
+
+/* =====================================================================
+   VIEW: Add member
+   ===================================================================== */
+function renderAddForm() {
+  const root = $("#view-add");
+  root.innerHTML = `
+    <div class="view-header">
+      <div class="view-header-inner">
+        <h1>Add member</h1>
+        <p>Create a new member record and optionally assign them to a fam.</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <form id="add-form">
+          <div class="section-title">Member details</div>
+          <div class="form-grid">
+            <div class="field">
+              <label>First name <span class="req">*</span></label>
+              <input name="first_name" required />
+            </div>
+            <div class="field">
+              <label>Last name <span class="req">*</span></label>
+              <input name="last_name" required />
+            </div>
+            <div class="field span-2">
+              <label>Email <span class="req">*</span></label>
+              <input name="email" type="email" required />
+            </div>
+            <div class="field">
+              <label>Student ID</label>
+              <input name="student_id" placeholder="Optional" />
+            </div>
+            <div class="field">
+              <label>Discord username</label>
+              <input name="discord_username" placeholder="Optional" />
+            </div>
+            <div class="field">
+              <label>Gender</label>
+              <select name="gender">${GENDERS.map((g, i) => `<option value="${g}" ${i === 0 ? "selected" : ""}>${prettyLabel(g)}</option>`).join("")}</select>
+            </div>
+            <div class="field">
+              <label>University year <span class="req">*</span></label>
+              <select name="university_year" required>${UNIVERSITY_YEARS.map((y) => `<option value="${y}">${y}</option>`).join("")}</select>
+            </div>
+            <div class="field">
+              <label>Role <span class="req">*</span></label>
+              <select name="role" required>${ROLES.map((r) => `<option value="${r}">${prettyLabel(r)}</option>`).join("")}</select>
+            </div>
+            <div class="field">
+              <label>Joined date <span class="req">*</span></label>
+              <input name="joined_date" type="date" required value="${todayISO()}" />
+            </div>
+            <div class="field span-2">
+              <label>Notes</label>
+              <textarea name="notes" placeholder="Optional"></textarea>
+            </div>
+          </div>
+
+          <div class="section-title" style="margin-top:28px;">Fam assignment <span style="text-transform:none; font-weight:400; color:var(--text-soft); letter-spacing:0;">(optional)</span></div>
+          <div class="form-grid">
+            <div class="field">
+              <label>Fam</label>
+              <select name="fam_id">
+                <option value="">— None —</option>
+                ${state.fams.map((f) => `<option value="${f.fam_id}">${escapeHtml(f.name)}</option>`).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label>Fam role</label>
+              <select name="fam_role">${FAM_ROLES.map((r) => `<option value="${r}">${prettyLabel(r)}</option>`).join("")}</select>
+            </div>
+            <div class="field">
+              <label>Assignment method</label>
+              <select name="assignment_method">${ASSIGNMENT_METHODS.map((a) => `<option value="${a}">${prettyLabel(a)}</option>`).join("")}</select>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="button" class="btn-ghost" id="add-cancel">Cancel</button>
+            <button type="submit" class="btn-primary" id="add-submit">Create member</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+
+  $("#add-cancel").addEventListener("click", () => setView("members"));
+  $("#add-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = $("#add-submit");
+    btn.disabled = true;
+    btn.textContent = "Saving…";
+    try {
+      const fd = new FormData(e.target);
+      const newMember = {
+        first_name: fd.get("first_name").trim(),
+        last_name: fd.get("last_name").trim(),
+        email: fd.get("email").trim(),
+        student_id: fd.get("student_id").trim() || null,
+        discord_username: fd.get("discord_username").trim() || null,
+        gender: fd.get("gender"),
+        university_year: fd.get("university_year"),
+        role: fd.get("role"),
+        joined_date: fd.get("joined_date"),
+        notes: fd.get("notes").trim() || null,
+        is_active: true,
+      };
+      const { data, error } = await db.from("members").insert(newMember).select().single();
+      if (error) throw error;
+
+      const famId = fd.get("fam_id");
+      if (famId) {
+        const { error: famErr } = await db.from("fam_memberships").insert({
+          member_id: data.member_id,
+          fam_id: famId,
+          joined_date: newMember.joined_date,
+          fam_role: fd.get("fam_role"),
+          assignment_method: fd.get("assignment_method"),
+          is_current: true,
+        });
+        if (famErr) throw famErr;
+      }
+
+      await loadAll();
+      toast("Member created", "success");
+      setView("detail", { memberId: data.member_id });
+    } catch (err) {
+      showError(err, "Creation failed");
+      btn.disabled = false;
+      btn.textContent = "Create member";
+    }
+  });
+}
+
+/* =====================================================================
+   VIEW: Fam rosters
+   ===================================================================== */
+function renderFams() {
+  const root = $("#view-fams");
+  const desiredOrder = ["Ryu", "Tsuru", "Kitsune", "Koi"];
+  const sortedFams = state.fams.slice().sort((a, b) => {
+    const ia = desiredOrder.indexOf(a.name);
+    const ib = desiredOrder.indexOf(b.name);
+    if (ia === -1 && ib === -1) return a.name.localeCompare(b.name);
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+
+  root.innerHTML = `
+    <div class="view-header">
+      <div class="view-header-inner">
+        <h1>Fam rosters</h1>
+        <p>Current members grouped by fam.</p>
+      </div>
+    </div>
+    <div class="fam-grid">
+      ${sortedFams.length === 0
+        ? `<div class="empty-state" style="grid-column:1/-1;">No fams defined yet.</div>`
+        : sortedFams.map(renderFamColumn).join("")}
+    </div>
+  `;
+
+  $$(".fam-member").forEach((el) => {
+    el.addEventListener("click", () => setView("detail", { memberId: el.dataset.id }));
+  });
+}
+
+function renderFamColumn(fam) {
+  const members = state.famMemberships
+    .filter((fm) => idEq(fm.fam_id, fam.fam_id) && fm.is_current)
+    .map((fm) => {
+      const m = state.members.find((x) => idEq(x.member_id, fm.member_id));
+      return m ? { ...m, fam_role: fm.fam_role } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      const roleOrder = { fam_leader: 0, co_leader: 1, member: 2 };
+      const ra = roleOrder[a.fam_role] ?? 3;
+      const rb = roleOrder[b.fam_role] ?? 3;
+      if (ra !== rb) return ra - rb;
+      return (a.last_name || "").localeCompare(b.last_name || "");
+    });
+
+  return `
+    <div class="fam-column">
+      <div class="fam-header" style="background:${escapeHtml(fam.color)}">
+        <div class="fam-name">${escapeHtml(fam.name)}</div>
+        <div class="fam-count">${members.length} member${members.length === 1 ? "" : "s"}</div>
+      </div>
+      ${fam.description ? `<div class="fam-desc">${escapeHtml(fam.description)}</div>` : ""}
+      <div class="fam-members">
+        ${members.length === 0
+          ? `<div class="fam-empty">No members yet</div>`
+          : members.map((m) => {
+              const feeActive = isFeeActive(m);
+              const leaderTag = m.fam_role !== "member"
+                ? `<span class="badge badge-neutral">${escapeHtml(prettyLabel(m.fam_role))}</span>`
+                : "";
+              return `
+                <div class="fam-member" data-id="${m.member_id}">
+                  <div class="fam-member-name">${escapeHtml(m.first_name)} ${escapeHtml(m.last_name)}</div>
+                  <div class="fam-member-meta">
+                    <span class="badge badge-role">${escapeHtml(prettyLabel(m.role))}</span>
+                    ${leaderTag}
+                    ${feeActive
+                      ? `<span class="badge badge-active"><span class="dot"></span>Active</span>`
+                      : `<span class="badge badge-unpaid"><span class="dot"></span>Unpaid</span>`}
+                  </div>
+                </div>
+              `;
+            }).join("")}
+      </div>
+    </div>
+  `;
+}
+
+/* =====================================================================
+   VIEW: Pending verifications
+   ===================================================================== */
+// True when the member has another pending/verified fee row for the same
+// academic year — the "double-submit / plan upgrade" flag from CLAUDE.md.
+function hasOtherFeeThisYear(fee) {
+  return state.membershipFees.some((f) =>
+    !idEq(f.fee_id, fee.fee_id) &&
+    idEq(f.member_id, fee.member_id) &&
+    f.academic_year === fee.academic_year &&
+    (f.status === "pending" || f.status === "verified")
+  );
+}
+
+function renderPending() {
+  const root = $("#view-pending");
+  const pending = state.membershipFees
+    .filter((f) => f.status === "pending")
+    .sort((a, b) => (b.paid_date || "").localeCompare(a.paid_date || ""));
+
+  root.innerHTML = `
+    <div class="view-header">
+      <div class="view-header-inner">
+        <h1>Pending verifications</h1>
+        <p>${pending.length} payment${pending.length === 1 ? "" : "s"} awaiting review.</p>
+      </div>
+    </div>
+    <div class="stack">
+      <div id="verify-slot"></div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Member</th>
+                <th>Year</th>
+                <th>Plan</th>
+                <th>Amount</th>
+                <th>Method</th>
+                <th>Submitted</th>
+                <th>Screenshot</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${pending.length === 0
+                ? `<tr><td colspan="8" class="empty-state">Nothing to verify. 🎉</td></tr>`
+                : pending.map(renderPendingRow).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+
+  $$("#view-pending tbody tr.clickable").forEach((row) => {
+    row.addEventListener("click", () => {
+      const fee = state.membershipFees.find((f) => idEq(f.fee_id, row.dataset.id));
+      if (fee) renderVerifyForm(fee);
+    });
+  });
+  $$("#view-pending a[data-screenshot]").forEach((a) => {
+    a.addEventListener("click", (e) => e.stopPropagation());
+  });
+}
+
+function renderPendingRow(f) {
+  const m = state.members.find((x) => idEq(x.member_id, f.member_id));
+  const name = m ? `${m.first_name} ${m.last_name}` : `Member #${f.member_id}`;
+  const dupe = hasOtherFeeThisYear(f)
+    ? `<div style="margin-top:3px;"><span class="badge badge-pending">Already has a fee this year</span></div>`
+    : "";
+  return `
+    <tr class="clickable" data-id="${f.fee_id}">
+      <td><div style="font-weight:500;">${escapeHtml(name)}</div>${dupe}</td>
+      <td class="mono">${escapeHtml(f.academic_year)}</td>
+      <td>${escapeHtml(prettyLabel(f.plan))}</td>
+      <td>$${Number(f.amount_paid || 0).toFixed(2)}</td>
+      <td>${escapeHtml(prettyLabel(f.payment_method))}</td>
+      <td>${formatDate(f.paid_date)}</td>
+      <td>${f.screenshot_url
+        ? `<a data-screenshot href="${escapeHtml(f.screenshot_url)}" target="_blank" rel="noopener">View</a>`
+        : `<span style="color:var(--text-soft); font-size:12px;">—</span>`}</td>
+      <td style="text-align:right;"><button class="btn-ghost" type="button">Review →</button></td>
+    </tr>
+  `;
+}
+
+function renderVerifyForm(f) {
+  const slot = $("#verify-slot");
+  const m = state.members.find((x) => idEq(x.member_id, f.member_id));
+  const name = m ? `${m.first_name} ${m.last_name}` : `Member #${f.member_id}`;
+  const dupeBanner = hasOtherFeeThisYear(f)
+    ? `<div class="error-banner">This member already has another pending or verified fee for ${escapeHtml(f.academic_year)}. Verify one and reject the other.</div>`
+    : "";
+
+  slot.innerHTML = `
+    <div class="card">
+      <div class="card-header">
+        <h3>Verify payment — ${escapeHtml(name)} <span class="mono" style="color:var(--text-soft);">(${escapeHtml(f.academic_year)})</span></h3>
+        ${f.screenshot_url ? `<a href="${escapeHtml(f.screenshot_url)}" target="_blank" rel="noopener">Open screenshot ↗</a>` : ""}
+      </div>
+      <div class="card-body">
+        ${dupeBanner}
+        <form id="verify-form">
+          <div class="form-grid">
+            <div class="field">
+              <label>Plan</label>
+              <select name="plan">${PLANS.map((p) => `<option value="${p}" ${f.plan === p ? "selected" : ""}>${prettyLabel(p)}</option>`).join("")}</select>
+            </div>
+            <div class="field">
+              <label>Payment method</label>
+              <select name="payment_method">${PAYMENT_METHODS.map((p) => `<option value="${p}" ${f.payment_method === p ? "selected" : ""}>${prettyLabel(p)}</option>`).join("")}</select>
+            </div>
+            <div class="field">
+              <label>Amount paid</label>
+              <input name="amount_paid" type="number" step="0.01" min="0" required value="${Number(f.amount_paid || 0).toFixed(2)}" />
+            </div>
+            <div class="field">
+              <label>Paid date</label>
+              <input name="paid_date" type="date" required value="${f.paid_date || todayISO()}" />
+            </div>
+            <div class="field">
+              <label>Valid from</label>
+              <input name="valid_from" type="date" required value="${f.valid_from || ""}" />
+            </div>
+            <div class="field">
+              <label>Valid until</label>
+              <input name="valid_until" type="date" required value="${f.valid_until || ""}" />
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn-ghost" id="verify-cancel">Cancel</button>
+            <button type="button" class="btn-danger-ghost" id="verify-reject">Reject</button>
+            <button type="submit" class="btn-primary" id="verify-submit">Verify</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+  slot.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  const form = $("#verify-form");
+
+  // Changing the plan or paid date recomputes validity dates and the default
+  // price (late iff paid_date >= late_from); the treasurer can still override
+  // any of them before verifying.
+  form.addEventListener("change", (e) => {
+    if (e.target.name !== "plan" && e.target.name !== "paid_date") return;
+    const plan = form.elements.plan.value;
+    if (e.target.name === "plan") {
+      const dates = computeValidity(f.academic_year, plan);
+      if (dates) {
+        form.elements.valid_from.value = dates.valid_from;
+        form.elements.valid_until.value = dates.valid_until;
+      }
+    }
+    const price = planPrice(f.academic_year, plan, form.elements.paid_date.value);
+    if (price !== null) form.elements.amount_paid.value = price.toFixed(2);
+  });
+
+  $("#verify-cancel").addEventListener("click", () => (slot.innerHTML = ""));
+
+  async function resolve(status) {
+    const submitBtn = $("#verify-submit");
+    const rejectBtn = $("#verify-reject");
+    submitBtn.disabled = rejectBtn.disabled = true;
+    try {
+      const fd = new FormData(form);
+      const updates = { status };
+      if (status === "verified") {
+        Object.assign(updates, {
+          plan: fd.get("plan"),
+          payment_method: fd.get("payment_method"),
+          amount_paid: Number(fd.get("amount_paid")),
+          paid_date: fd.get("paid_date"),
+          valid_from: fd.get("valid_from"),
+          valid_until: fd.get("valid_until"),
+        });
+      }
+      const { error } = await db.from("membership_fees").update(updates).eq("fee_id", f.fee_id);
+      if (error) throw error;
+      await loadAll();
+      toast(status === "verified" ? "Payment verified" : "Payment rejected", "success");
+      renderPending();
+    } catch (err) {
+      showError(err, status === "verified" ? "Verification failed" : "Rejection failed");
+      submitBtn.disabled = rejectBtn.disabled = false;
+    }
+  }
+
+  $("#verify-reject").addEventListener("click", () => resolve("rejected"));
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    resolve("verified");
+  });
+}
+
+/* =====================================================================
+   Bootstrap
+   ===================================================================== */
+async function init() {
+  // Credential check
+  if (typeof SUPABASE_URL === "undefined" || !SUPABASE_URL || SUPABASE_URL.includes("YOUR_SUPABASE_URL") ||
+      typeof SUPABASE_ANON_KEY === "undefined" || !SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.includes("YOUR_SUPABASE_ANON_KEY")) {
+    $("main").innerHTML = `
+      <div class="error-banner">
+        <strong>Configuration needed.</strong> Copy <code>config.example.js</code> to
+        <code>config.js</code> and fill in <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code>.
+      </div>
+    `;
+    return;
+  }
+
+  $("main").insertAdjacentHTML("afterbegin", `<div class="loading" id="boot-loading">Loading data…</div>`);
+  try {
+    await loadAll();
+    $("#boot-loading")?.remove();
+    setView("members");
+  } catch {
+    $("#boot-loading")?.remove();
+  }
+
+  $$(".nav-link").forEach((b) => {
+    b.addEventListener("click", () => setView(b.dataset.view));
+  });
+}
+
+init();
+</script>
+</body>
+</html>

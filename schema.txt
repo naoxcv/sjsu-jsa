@@ -1,0 +1,57 @@
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE public.academic_periods (
+  period_id integer NOT NULL DEFAULT nextval('academic_periods_period_id_seq'::regclass),
+  academic_year character varying NOT NULL,
+  semester integer NOT NULL CHECK (semester = ANY (ARRAY[1, 2])),
+  start_date date NOT NULL,
+  end_date date NOT NULL,
+  CONSTRAINT academic_periods_pkey PRIMARY KEY (period_id)
+);
+CREATE TABLE public.fams (
+  fam_id integer NOT NULL DEFAULT nextval('fams_fam_id_seq'::regclass),
+  name character varying NOT NULL UNIQUE,
+  description text,
+  color character varying,
+  CONSTRAINT fams_pkey PRIMARY KEY (fam_id)
+);
+CREATE TABLE public.members (
+  member_id integer NOT NULL DEFAULT nextval('members_member_id_seq'::regclass),
+  first_name character varying NOT NULL,
+  last_name character varying NOT NULL,
+  email character varying NOT NULL UNIQUE,
+  gender character varying CHECK (gender::text = ANY (ARRAY['male'::character varying, 'female'::character varying, 'other'::character varying, 'prefer_not_to_say'::character varying]::text[])),
+  university_year character varying CHECK (university_year::text = ANY (ARRAY['1st'::character varying, '2nd'::character varying, '3rd'::character varying, '4th'::character varying, 'postgrad'::character varying]::text[])),
+  role character varying DEFAULT 'member'::character varying CHECK (role::text = ANY (ARRAY['member'::character varying, 'president'::character varying, 'vice_president'::character varying, 'vp_finance'::character varying, 'vp_marketing'::character varying, 'vp_operations'::character varying, 'vp_events'::character varying, 'vp_mentorship'::character varying, 'vp_careers'::character varying]::text[])),
+  joined_date date NOT NULL DEFAULT CURRENT_DATE,
+  is_active boolean DEFAULT true,
+  notes text,
+  discord_username text,
+  CONSTRAINT members_pkey PRIMARY KEY (member_id)
+);
+CREATE TABLE public.membership_fees (
+  fee_id integer NOT NULL DEFAULT nextval('membership_fees_fee_id_seq'::regclass),
+  member_id integer NOT NULL,
+  academic_year character varying NOT NULL,
+  plan character varying NOT NULL CHECK (plan::text = ANY (ARRAY['semester_1'::character varying, 'semester_2'::character varying, 'full_year'::character varying]::text[])),
+  amount_paid numeric NOT NULL,
+  paid_date date NOT NULL DEFAULT CURRENT_DATE,
+  valid_from date NOT NULL,
+  valid_until date NOT NULL,
+  payment_method character varying DEFAULT 'cash'::character varying CHECK (payment_method::text = ANY (ARRAY['cash'::character varying, 'bank_transfer'::character varying, 'online'::character varying]::text[])),
+  CONSTRAINT membership_fees_pkey PRIMARY KEY (fee_id),
+  CONSTRAINT membership_fees_member_id_fkey FOREIGN KEY (member_id) REFERENCES public.members(member_id)
+);
+CREATE TABLE public.fam_memberships (
+  fam_membership_id integer NOT NULL DEFAULT nextval('fam_memberships_fam_membership_id_seq'::regclass),
+  member_id integer NOT NULL,
+  fam_id integer NOT NULL,
+  joined_date date NOT NULL DEFAULT CURRENT_DATE,
+  fam_role character varying DEFAULT 'member'::character varying CHECK (fam_role::text = ANY (ARRAY['member'::character varying, 'fam_leader'::character varying, 'co_leader'::character varying]::text[])),
+  assignment_method character varying DEFAULT 'selected'::character varying CHECK (assignment_method::text = ANY (ARRAY['selected'::character varying, 'requested'::character varying, 'transferred'::character varying]::text[])),
+  is_current boolean DEFAULT true,
+  CONSTRAINT fam_memberships_pkey PRIMARY KEY (fam_membership_id),
+  CONSTRAINT fam_memberships_member_id_fkey FOREIGN KEY (member_id) REFERENCES public.members(member_id),
+  CONSTRAINT fam_memberships_fam_id_fkey FOREIGN KEY (fam_id) REFERENCES public.fams(fam_id)
+);
