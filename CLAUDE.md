@@ -182,10 +182,25 @@ validity + price lookups, screenshot Drive URL capture, error-tab logging.
 - Supabase Auth / RLS policies (revisit only if the officer team grows or the file leaks)
 - Scheduled jobs of any kind (nothing time-driven exists in this stack)
 
+## Hosting
+
+- Deployed to Cloudflare Pages (project `sjsu-jsa-admin`, `sjsu-jsa-admin.pages.dev`),
+  gated by Cloudflare Access (One-Time PIN login, Allow policy = officer email list).
+  Access protects page load; it does not proxy the Supabase calls themselves (those go
+  browser → Supabase directly, same as the local-file model — see below).
+- `config.js` holds the real Supabase credentials, is gitignored, and is never committed.
+  `config.example.js` is the checked-in template. The repo (`naoxcv/sjsu-jsa`) is **public**,
+  which is why credentials live outside it.
+- To redeploy after editing `club-admin.html`: run `./deploy.sh` (copies the file +
+  `config.js` into `dist/` and runs `wrangler pages deploy`). Requires local `wrangler`
+  login.
+- Officers can still open `club-admin.html` directly in a browser for local/offline use,
+  same as before — the hosted version is the day-to-day path, not a replacement.
+
 ## Known operational notes
 
-- Anyone with the HTML file has full DB access (RLS off + embedded anon key).
-  Don't post it anywhere public. Rotating the key means re-editing + redistributing.
+- Anyone with the HTML file *or* past the Access gate has full DB access (RLS off +
+  embedded anon key). Rotating the key means re-editing `config.js` + redeploying.
 - Payment screenshots in Drive contain personal data; purge at end of year.
 - Discord usernames change; expect to update them manually mid-year.
 - Supabase free tier: no automated backups — export periodically.
