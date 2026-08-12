@@ -72,12 +72,14 @@ ALTER TABLE public.membership_plans
   ADD COLUMN IF NOT EXISTS late_from date,
   ADD COLUMN IF NOT EXISTS late_price numeric;
 
--- 6. university_year: rename 'postgrad' → '5+' (existing rows first, then
---    the check constraint so the update itself isn't rejected).
-UPDATE public.members SET university_year = '5+' WHERE university_year = 'postgrad';
-
+-- 6. university_year: rename 'postgrad' → '5+' (drop the check constraint
+--    first so the update isn't rejected by the old 'postgrad'-allowing rule,
+--    then re-add it with '5+').
 ALTER TABLE public.members
   DROP CONSTRAINT IF EXISTS members_university_year_check;
+
+UPDATE public.members SET university_year = '5+' WHERE university_year = 'postgrad';
+
 ALTER TABLE public.members
   ADD CONSTRAINT members_university_year_check
     CHECK (university_year::text = ANY (ARRAY['1st'::character varying, '2nd'::character varying, '3rd'::character varying, '4th'::character varying, '5+'::character varying]::text[]));
