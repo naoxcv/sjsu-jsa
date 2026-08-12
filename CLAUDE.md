@@ -33,7 +33,7 @@ submissions into Supabase.
 ### Existing tables
 
 - **members**: `member_id` (PK), `first_name`, `last_name`, `email`,
-  `gender` (male/female/other/prefer_not_to_say — *currently unused by the form; keep*),
+  `gender` (male/female/other/prefer_not_to_say),
   `university_year` (1st/2nd/3rd/4th/5+),
   `role` (member/president/vice_president/treasurer/secretary/events/marketing),
   `joined_date`, `is_active` (boolean — **manual override only**, see Decisions),
@@ -117,20 +117,21 @@ Returns null (blocks insert with clear error) if the period rows don't exist.
 
 ## Google Form spec
 
-Fields: first name, last name, discord, email, student ID, university year,
+Fields: first name, last name, discord, email, student ID, gender
+(Male/Female/Other/Prefer not to say), university year,
 fam interest (Y/N), mentorship interest (Y/N),
 membership plan (**Semester 1 / Semester 2 / Full Year** — explicit, mapping 1:1 to the
 enum; no date-inference of which semester), payment method (Venmo/Zelle/cash),
 payment screenshot upload.
 
-- **Goes to DB**: fn, ln, discord, email, student_id, year → `members`;
+- **Goes to DB**: fn, ln, discord, email, student_id, gender, year → `members`;
   plan, payment method, screenshot Drive URL → `membership_fees` (as pending).
 - **Stays in the Sheet only**: the two Y/N interest questions (rough headcount) and the
   raw screenshot files. Fam assignment happens later via a separate form (out of scope).
 - `paid_date` defaults to the form submission timestamp; treasurer can edit at verification.
 - `amount_paid` defaults from `membership_plans`; treasurer can edit at verification.
 - Not on the form: role (defaults `member`), is_active (defaults true), joined_date
-  (set by script), gender, notes.
+  (set by script), notes.
 - Insert failures are logged to an errors tab in the response Sheet and handled manually.
   No email plumbing.
 

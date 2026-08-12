@@ -33,6 +33,7 @@ var FORM_FIELDS = {
   discord: "Discord username",
   email: "Email",
   studentId: "Student ID",
+  gender: "Gender",
   universityYear: "University year",
   plan: "Membership plan",
   paymentMethod: "Payment method",
@@ -53,6 +54,12 @@ var PAYMENT_MAP = {
 var YEAR_MAP = {
   "1st": "1st", "2nd": "2nd", "3rd": "3rd", "4th": "4th", "5+": "5+",
 };
+var GENDER_MAP = {
+  "Male": "male",
+  "Female": "female",
+  "Other": "other",
+  "Prefer not to say": "prefer_not_to_say",
+};
 
 function onFormSubmit(e) {
   try {
@@ -65,6 +72,7 @@ function onFormSubmit(e) {
     var plan = requireMap_(PLAN_MAP, row[FORM_FIELDS.plan], "plan");
     var method = requireMap_(PAYMENT_MAP, row[FORM_FIELDS.paymentMethod], "payment method");
     var year = requireMap_(YEAR_MAP, row[FORM_FIELDS.universityYear], "university year");
+    var gender = requireMap_(GENDER_MAP, row[FORM_FIELDS.gender], "gender");
 
     var paidDate = toISODate_(new Date()); // submission timestamp
     var validity = computeValidity_(academicYear, plan);      // throws if periods missing
@@ -83,9 +91,10 @@ function onFormSubmit(e) {
         discord_username: String(row[FORM_FIELDS.discord] || "").trim() || null,
         student_id: studentId,
         university_year: year,
+        gender: gender,
         joined_date: paidDate,
         is_active: true,
-        // role defaults to 'member'; gender and notes stay null
+        // role defaults to 'member'; notes stays null
       });
       memberId = inserted[0].member_id;
     } else {
