@@ -1,0 +1,7 @@
+{
+  "name": "sjsu-jsa-admin",
+  "private": true,
+  "scripts": {
+    "test": "node --test"
+  }
+}

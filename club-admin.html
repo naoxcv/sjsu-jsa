@@ -7,7 +7,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3"
+  integrity="sha384-l8ah+VgaWtk1mvOe9VC+OirC6qHFF4yH7l7mKRidV9MSti3E9F463bMp6ZVN4kuC"
+  crossorigin="anonymous"></script>
 <style>
   :root {
     --bg: #fafaf7;
@@ -498,6 +500,7 @@
      (gitignored; copy config.example.js to config.js and fill in)
      ========================================================= -->
 <script src="config.js"></script>
+<script src="logic.js"></script>
 
 <header>
   <nav class="nav">
@@ -528,6 +531,7 @@
 
 const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const { idEq, todayISO, isFeeActive, feeRowStatus, computeValidity, planPrice, hasOtherFeeThisYear } = Logic;
 
 /* ---------- Constants ---------- */
 const UNIVERSITY_YEARS = ["1st", "2nd", "3rd", "4th", "5+"];
@@ -566,11 +570,6 @@ function escapeHtml(str) {
     .replace(/'/g, "&#39;");
 }
 
-function todayISO() {
-  const d = new Date();
-  return d.toISOString().slice(0, 10);
-}
-
 function formatDate(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -581,26 +580,6 @@ function formatDate(iso) {
 function prettyLabel(str) {
   if (!str) return "";
   return String(str).replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-// All IDs compared via String() so int / bigint / uuid columns all work,
-// whether the value originates from the DB (typed) or a DOM dataset (string).
-function idEq(a, b) {
-  return a != null && b != null && String(a) === String(b);
-}
-
-function isFeeActive(member) {
-  const today = todayISO();
-  const fees = state.membershipFees.filter((f) => idEq(f.member_id, member.member_id));
-  return fees.some((f) => f.status === "verified" && f.valid_until && f.valid_until >= today);
-}
-
-// Per-row status, evaluated in fixed order: rejected → pending → verified/expired.
-// Pending never shows as Expired, even if its dates have lapsed.
-function feeRowStatus(f) {
-  if (f.status === "rejected") return "rejected";
-  if (f.status === "pending") return "pending";
-  return f.valid_until && f.valid_until >= todayISO() ? "active" : "expired";
 }
 
 function feeStatusBadge(f) {
@@ -703,7 +682,7 @@ function renderMembers() {
   const root = $("#view-members");
   const q = state.searchQuery.toLowerCase().trim();
   let rows = state.members.slice();
-  if (!state.showAll) rows = rows.filter((m) => m.is_active && isFeeActive(m));
+  if (!state.showAll) rows = rows.filter((m) => m.is_active && isFeeActive(m, state.membershipFees));
   if (q) {
     rows = rows.filter((m) =>
       [m.first_name, m.last_name, m.email, m.discord_username, m.student_id, m.role]
@@ -772,7 +751,7 @@ function renderMembers() {
 
 function renderMemberRow(m) {
   const fam = getCurrentFam(m.member_id);
-  const feeActive = isFeeActive(m);
+  const feeActive = isFeeActive(m, state.membershipFees);
   return `
     <tr class="clickable" data-id="${m.member_id}">
       <td>
@@ -807,7 +786,7 @@ function renderDetail() {
     return;
   }
   const fam = getCurrentFam(m.member_id);
-  const feeActive = isFeeActive(m);
+  const feeActive = isFeeActive(m, state.membershipFees);
   const fees = state.membershipFees
     .filter((f) => idEq(f.member_id, m.member_id))
     .sort((a, b) => (b.paid_date || "").localeCompare(a.paid_date || ""));
@@ -1117,7 +1096,7 @@ function renderPaymentForm(m) {
 
   function updatePreview() {
     const fd = new FormData(form);
-    const dates = computeValidity(fd.get("academic_year"), fd.get("plan"));
+    const dates = computeValidity(fd.get("academic_year"), fd.get("plan"), state.academicPeriods);
     if (!dates) {
       preview.textContent = "No matching academic period";
       preview.style.color = "var(--danger-text)";
@@ -1128,7 +1107,7 @@ function renderPaymentForm(m) {
   }
   function fillDefaultAmount() {
     const fd = new FormData(form);
-    const price = planPrice(fd.get("academic_year"), fd.get("plan"), fd.get("paid_date"));
+    const price = planPrice(fd.get("academic_year"), fd.get("plan"), fd.get("paid_date"), state.membershipPlans);
     if (price !== null) form.elements.amount_paid.value = price.toFixed(2);
   }
   updatePreview();
@@ -1148,7 +1127,7 @@ function renderPaymentForm(m) {
       const fd = new FormData(form);
       const academic_year = fd.get("academic_year");
       const plan = fd.get("plan");
-      const dates = computeValidity(academic_year, plan);
+      const dates = computeValidity(academic_year, plan, state.academicPeriods);
       if (!dates) throw new Error("No academic period matches that year/plan. Add one in the academic_periods table.");
       const row = {
         member_id: m.member_id,
@@ -1172,34 +1151,6 @@ function renderPaymentForm(m) {
       btn.textContent = "Record payment";
     }
   });
-}
-
-// Price list lookup — returns null if no membership_plans row exists for the
-// pair. Late pricing keys off the actual paid date (not verification time):
-// paid_date >= late_from → late_price.
-function planPrice(academicYear, plan, paidDate) {
-  const row = state.membershipPlans.find((p) => p.academic_year === academicYear && p.plan === plan);
-  if (!row) return null;
-  const late = row.late_from && row.late_price != null && paidDate && paidDate >= row.late_from;
-  return Number(late ? row.late_price : row.price);
-}
-
-function computeValidity(academicYear, plan) {
-  const sem1 = state.academicPeriods.find((p) => p.academic_year === academicYear && p.semester === 1);
-  const sem2 = state.academicPeriods.find((p) => p.academic_year === academicYear && p.semester === 2);
-  if (plan === "semester_1") {
-    if (!sem1) return null;
-    return { valid_from: sem1.start_date, valid_until: sem1.end_date };
-  }
-  if (plan === "semester_2") {
-    if (!sem2) return null;
-    return { valid_from: sem2.start_date, valid_until: sem2.end_date };
-  }
-  if (plan === "full_year") {
-    if (!sem1 || !sem2) return null;
-    return { valid_from: sem1.start_date, valid_until: sem2.end_date };
-  }
-  return null;
 }
 
 /* =====================================================================
@@ -1398,7 +1349,7 @@ function renderFamColumn(fam) {
         ${members.length === 0
           ? `<div class="fam-empty">No members yet</div>`
           : members.map((m) => {
-              const feeActive = isFeeActive(m);
+              const feeActive = isFeeActive(m, state.membershipFees);
               const leaderTag = m.fam_role !== "member"
                 ? `<span class="badge badge-neutral">${escapeHtml(prettyLabel(m.fam_role))}</span>`
                 : "";
@@ -1423,17 +1374,6 @@ function renderFamColumn(fam) {
 /* =====================================================================
    VIEW: Pending verifications
    ===================================================================== */
-// True when the member has another pending/verified fee row for the same
-// academic year — the "double-submit / plan upgrade" flag from CLAUDE.md.
-function hasOtherFeeThisYear(fee) {
-  return state.membershipFees.some((f) =>
-    !idEq(f.fee_id, fee.fee_id) &&
-    idEq(f.member_id, fee.member_id) &&
-    f.academic_year === fee.academic_year &&
-    (f.status === "pending" || f.status === "verified")
-  );
-}
-
 function renderPending() {
   const root = $("#view-pending");
   const pending = state.membershipFees
@@ -1489,7 +1429,7 @@ function renderPending() {
 function renderPendingRow(f) {
   const m = state.members.find((x) => idEq(x.member_id, f.member_id));
   const name = m ? `${m.first_name} ${m.last_name}` : `Member #${f.member_id}`;
-  const dupe = hasOtherFeeThisYear(f)
+  const dupe = hasOtherFeeThisYear(f, state.membershipFees)
     ? `<div style="margin-top:3px;"><span class="badge badge-pending">Already has a fee this year</span></div>`
     : "";
   return `
@@ -1512,7 +1452,7 @@ function renderVerifyForm(f) {
   const slot = $("#verify-slot");
   const m = state.members.find((x) => idEq(x.member_id, f.member_id));
   const name = m ? `${m.first_name} ${m.last_name}` : `Member #${f.member_id}`;
-  const dupeBanner = hasOtherFeeThisYear(f)
+  const dupeBanner = hasOtherFeeThisYear(f, state.membershipFees)
     ? `<div class="error-banner">This member already has another pending or verified fee for ${escapeHtml(f.academic_year)}. Verify one and reject the other.</div>`
     : "";
 
@@ -1571,13 +1511,13 @@ function renderVerifyForm(f) {
     if (e.target.name !== "plan" && e.target.name !== "paid_date") return;
     const plan = form.elements.plan.value;
     if (e.target.name === "plan") {
-      const dates = computeValidity(f.academic_year, plan);
+      const dates = computeValidity(f.academic_year, plan, state.academicPeriods);
       if (dates) {
         form.elements.valid_from.value = dates.valid_from;
         form.elements.valid_until.value = dates.valid_until;
       }
     }
-    const price = planPrice(f.academic_year, plan, form.elements.paid_date.value);
+    const price = planPrice(f.academic_year, plan, form.elements.paid_date.value, state.membershipPlans);
     if (price !== null) form.elements.amount_paid.value = price.toFixed(2);
   });
 

@@ -8,5 +8,7 @@ cd "$(dirname "$0")"
 mkdir -p dist
 cp club-admin.html dist/index.html
 cp config.js dist/config.js
+cp logic.js dist/logic.js
+cp _headers dist/_headers
 
 npx wrangler pages deploy dist --project-name=sjsu-jsa-admin
