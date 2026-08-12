@@ -1,9 +1,13 @@
 /* =====================================================================
    Pure business logic — fee status, validity computation, duplicate-fee
    detection. No DOM, no Supabase client, no globals besides what's passed
-   in. Loaded as a plain <script> in club-admin.html (exposes window.Logic)
-   and required directly from Node tests (module.exports).
+   in. Loaded as a plain <script> in club-admin.html (exposes window.Logic
+   only — everything else stays scoped inside this IIFE so it can't
+   collide with identically-named bindings in the main app script, which
+   shares the same top-level scope across <script> tags) and required
+   directly from Node tests (module.exports).
    ===================================================================== */
+(function () {
 
 // All IDs compared via String() so int / bigint / uuid columns all work,
 // whether the value originates from the DB (typed) or a DOM dataset (string).
@@ -79,3 +83,5 @@ if (typeof module === "object" && module.exports) {
 } else {
   (typeof self !== "undefined" ? self : this).Logic = Logic;
 }
+
+})();
