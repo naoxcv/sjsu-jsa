@@ -8,10 +8,21 @@ fam rosters. New members sign up via a Google Form; a Google Apps Script bridges
 submissions into Supabase.
 
 **Stack (deliberate constraints — do not change without discussion):**
-- Single HTML file (`club-admin.html`): vanilla JS, Supabase JS client via CDN,
-  no build tools, no frameworks, no backend server. Runs by opening the file in a browser.
-- Supabase credentials (`SUPABASE_URL`, `SUPABASE_ANON_KEY`) are hardcoded at the top of
-  the file. Security model = key secrecy among a small officer team. RLS is **disabled**.
+- Vanilla JS, Supabase JS client via CDN (pinned version + SRI hash, not a floating tag),
+  no build tools, no frameworks, no backend server/API. `club-admin.html` is the app;
+  `logic.js` holds pure business logic (fee status, validity, duplicate-fee detection),
+  split out so it's `require()`-able from `test/` without a browser or build step — this
+  is the one deliberate exception to "single file," accepted now that the tool is
+  primarily accessed via the Cloudflare Pages deployment rather than opened locally.
+  Officers can still open `club-admin.html` directly for local/offline use; `logic.js`
+  and `config.js` just need to sit alongside it.
+- Supabase credentials (`SUPABASE_URL`, `SUPABASE_ANON_KEY`) live in `config.js`
+  (gitignored; `config.example.js` is the checked-in template — see Hosting section).
+  Security model = key secrecy among a small officer team, now gated further by
+  Cloudflare Access. RLS is **disabled**.
+- Tests: `node --test` (or `npm test`), zero dependencies, covers `logic.js` only.
+- `_headers` (Cloudflare Pages response headers: CSP + baseline hardening) is checked in
+  and copied into `dist/` by `deploy.sh`.
 - Google Apps Script (bound to the form's response sheet) handles form → DB inserts.
   Credentials live in `PropertiesService`, never in script source.
 - The officers share one Google account (owns the form, sheet, and screenshot uploads in
@@ -191,9 +202,13 @@ validity + price lookups, screenshot Drive URL capture, error-tab logging.
 - `config.js` holds the real Supabase credentials, is gitignored, and is never committed.
   `config.example.js` is the checked-in template. The repo (`naoxcv/sjsu-jsa`) is **public**,
   which is why credentials live outside it.
-- To redeploy after editing `club-admin.html`: run `./deploy.sh` (copies the file +
-  `config.js` into `dist/` and runs `wrangler pages deploy`). Requires local `wrangler`
-  login.
+- To redeploy after editing `club-admin.html` or `logic.js`: run `./deploy.sh` (copies
+  the file, `config.js`, `logic.js`, and `_headers` into `dist/`, then runs
+  `wrangler pages deploy`). Requires local `wrangler` login.
+- The `@supabase/supabase-js` `<script>` tag is pinned to an exact version with an SRI
+  hash. Bumping the Supabase JS version means re-fetching that version's file, computing
+  its `sha384` hash, and updating both the version number and `integrity` attribute
+  together — never just the version number alone.
 - Officers can still open `club-admin.html` directly in a browser for local/offline use,
   same as before — the hosted version is the day-to-day path, not a replacement.
 
