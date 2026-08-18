@@ -25,7 +25,7 @@ CREATE TABLE public.members (
   email character varying NOT NULL UNIQUE,
   gender character varying CHECK (gender::text = ANY (ARRAY['male'::character varying, 'female'::character varying, 'other'::character varying, 'prefer_not_to_say'::character varying]::text[])),
   university_year character varying CHECK (university_year::text = ANY (ARRAY['1st'::character varying, '2nd'::character varying, '3rd'::character varying, '4th'::character varying, '5+'::character varying]::text[])),
-  role character varying DEFAULT 'member'::character varying CHECK (role::text = ANY (ARRAY['member'::character varying, 'president'::character varying, 'vice_president'::character varying, 'vp_finance'::character varying, 'vp_marketing'::character varying, 'vp_operations'::character varying, 'vp_events'::character varying, 'vp_mentorship'::character varying, 'vp_careers'::character varying]::text[])),
+  role character varying DEFAULT 'member'::character varying CHECK (role::text = ANY (ARRAY['member'::character varying, 'president'::character varying, 'vice_president'::character varying, 'vp_finance'::character varying, 'vp_marketing'::character varying, 'vp_operations'::character varying, 'vp_events'::character varying, 'vp_mentorship'::character varying, 'vp_careers'::character varying, 'events_committee'::character varying, 'fams_committee'::character varying, 'skip_committee'::character varying, 'marketing_committee'::character varying]::text[])),
   joined_date date NOT NULL DEFAULT CURRENT_DATE,
   is_active boolean DEFAULT true,
   notes text,

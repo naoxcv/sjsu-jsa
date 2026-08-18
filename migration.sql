@@ -84,6 +84,17 @@ ALTER TABLE public.members
   ADD CONSTRAINT members_university_year_check
     CHECK (university_year::text = ANY (ARRAY['1st'::character varying, '2nd'::character varying, '3rd'::character varying, '4th'::character varying, '5+'::character varying]::text[]));
 
+-- 7. members.role — add committee roles (rank-and-file committee membership,
+--    coexisting with the existing vp_* leadership roles). No existing rows
+--    are affected, only the allowed set is widened, so no UPDATE needed
+--    before the constraint swap.
+ALTER TABLE public.members
+  DROP CONSTRAINT IF EXISTS members_role_check;
+
+ALTER TABLE public.members
+  ADD CONSTRAINT members_role_check
+    CHECK (role::text = ANY (ARRAY['member'::character varying, 'president'::character varying, 'vice_president'::character varying, 'vp_finance'::character varying, 'vp_marketing'::character varying, 'vp_operations'::character varying, 'vp_events'::character varying, 'vp_mentorship'::character varying, 'vp_careers'::character varying, 'events_committee'::character varying, 'fams_committee'::character varying, 'skip_committee'::character varying, 'marketing_committee'::character varying]::text[]));
+
 COMMIT;
 
 -- Seed 2026-2027 prices: $15/semester, $25/full year, +$5 after Oct 3.

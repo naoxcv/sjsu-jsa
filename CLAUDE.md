@@ -35,7 +35,11 @@ submissions into Supabase.
 - **members**: `member_id` (PK), `first_name`, `last_name`, `email`,
   `gender` (male/female/other/prefer_not_to_say),
   `university_year` (1st/2nd/3rd/4th/5+),
-  `role` (member/president/vice_president/treasurer/secretary/events/marketing),
+  `role` (member/president/vice_president/vp_finance/vp_marketing/vp_operations/vp_events/
+  vp_mentorship/vp_careers/events_committee/fams_committee/skip_committee/
+  marketing_committee — committee roles are rank-and-file membership on a committee,
+  distinct from and coexisting with the vp_* leadership roles; "SKIP" = Senpai/Kouhai
+  Program. Fam leadership is separate — see `fam_role` below, not a `members.role` value),
   `joined_date`, `is_active` (boolean — **manual override only**, see Decisions),
   `notes`
 - **membership_fees**: `fee_id` (PK), `member_id` (FK), `academic_year` (e.g. '2024-2025'),

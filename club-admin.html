@@ -536,7 +536,7 @@ const { idEq, todayISO, isFeeActive, feeRowStatus, computeValidity, planPrice, h
 /* ---------- Constants ---------- */
 const UNIVERSITY_YEARS = ["1st", "2nd", "3rd", "4th", "5+"];
 const GENDERS = ["male", "female", "other", "prefer_not_to_say"];
-const ROLES = ["member", "president", "vice_president", "vp_finance", "vp_operations", "vp_events", "vp_marketing", "vp_mentorship", "vp_careers"];
+const ROLES = ["member", "president", "vice_president", "vp_finance", "vp_operations", "vp_events", "vp_marketing", "vp_mentorship", "vp_careers", "events_committee", "fams_committee", "skip_committee", "marketing_committee"];
 const PLANS = ["semester_1", "semester_2", "full_year"];
 const PAYMENT_METHODS = ["venmo", "zelle", "cash"];
 const FAM_ROLES = ["member", "fam_leader", "co_leader"];
@@ -580,6 +580,13 @@ function formatDate(iso) {
 function prettyLabel(str) {
   if (!str) return "";
   return String(str).replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// SKIP (Senpai/Kouhai Program) is an acronym — prettyLabel's naive title-case
+// would render it "Skip Committee" instead of "SKIP Committee".
+const ROLE_LABEL_OVERRIDES = { skip_committee: "SKIP Committee" };
+function roleLabel(role) {
+  return ROLE_LABEL_OVERRIDES[role] || prettyLabel(role);
 }
 
 function feeStatusBadge(f) {
@@ -761,7 +768,7 @@ function renderMemberRow(m) {
       <td>${m.student_id ? `<span class="mono">${escapeHtml(m.student_id)}</span>` : `<span style="color:var(--text-soft); font-size:12px;">—</span>`}</td>
       <td>${m.discord_username ? `<span class="mono">${escapeHtml(m.discord_username)}</span>` : `<span style="color:var(--text-soft); font-size:12px;">—</span>`}</td>
       <td>${escapeHtml(m.university_year || "—")}</td>
-      <td><span class="badge badge-role">${escapeHtml(prettyLabel(m.role))}</span></td>
+      <td><span class="badge badge-role">${escapeHtml(roleLabel(m.role))}</span></td>
       <td>${fam
         ? `<span class="badge-fam" style="background:${escapeHtml(fam.color)}">${escapeHtml(fam.name)}</span>`
         : `<span style="color:var(--text-soft); font-size:12px;">—</span>`}</td>
@@ -824,7 +831,7 @@ function renderDetail() {
             ${detailItem("Discord username", m.discord_username)}
             ${detailItem("Gender", prettyLabel(m.gender))}
             ${detailItem("University year", m.university_year)}
-            ${detailItem("Role", prettyLabel(m.role))}
+            ${detailItem("Role", roleLabel(m.role))}
             ${detailItem("Joined", formatDate(m.joined_date))}
             ${detailItem("Active", m.is_active ? "Yes" : "No")}
             <div class="span-2">
@@ -935,7 +942,7 @@ function renderEditForm(m) {
             </div>
             <div class="field">
               <label>Role</label>
-              <select name="role">${ROLES.map((r) => `<option value="${r}" ${m.role === r ? "selected" : ""}>${prettyLabel(r)}</option>`).join("")}</select>
+              <select name="role">${ROLES.map((r) => `<option value="${r}" ${m.role === r ? "selected" : ""}>${roleLabel(r)}</option>`).join("")}</select>
             </div>
             <div class="field">
               <label>Joined date</label>
@@ -1200,7 +1207,7 @@ function renderAddForm() {
             </div>
             <div class="field">
               <label>Role <span class="req">*</span></label>
-              <select name="role" required>${ROLES.map((r) => `<option value="${r}">${prettyLabel(r)}</option>`).join("")}</select>
+              <select name="role" required>${ROLES.map((r) => `<option value="${r}">${roleLabel(r)}</option>`).join("")}</select>
             </div>
             <div class="field">
               <label>Joined date <span class="req">*</span></label>
@@ -1357,7 +1364,7 @@ function renderFamColumn(fam) {
                 <div class="fam-member" data-id="${m.member_id}">
                   <div class="fam-member-name">${escapeHtml(m.first_name)} ${escapeHtml(m.last_name)}</div>
                   <div class="fam-member-meta">
-                    <span class="badge badge-role">${escapeHtml(prettyLabel(m.role))}</span>
+                    <span class="badge badge-role">${escapeHtml(roleLabel(m.role))}</span>
                     ${leaderTag}
                     ${feeActive
                       ? `<span class="badge badge-active"><span class="dot"></span>Active</span>`
