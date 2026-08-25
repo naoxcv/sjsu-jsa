@@ -97,12 +97,12 @@ ALTER TABLE public.members
 
 COMMIT;
 
--- Seed 2026-2027 prices: $15/semester, $25/full year, +$5 after Oct 3.
+-- Seed 2026-2027 prices: $15/semester, $25/full year, +$5 after 9/18.
 -- (Semester 2's cutoff can be moved later by editing its late_from.)
 INSERT INTO public.membership_plans (academic_year, plan, price, late_from, late_price) VALUES
-  ('2026-2027', 'semester_1', 15.00, '2026-10-03', 20.00),
-  ('2026-2027', 'semester_2', 15.00, '2026-10-03', 20.00),
-  ('2026-2027', 'full_year', 25.00, '2026-10-03', 30.00)
+  ('2026-2027', 'semester_1', 15.00, '2026-09-18', 20.00),
+  ('2026-2027', 'semester_2', 15.00, '2026-09-18', 20.00),
+  ('2026-2027', 'full_year', 25.00, '2026-09-18', 30.00)
 ON CONFLICT (academic_year, plan) DO UPDATE
   SET price = EXCLUDED.price, late_from = EXCLUDED.late_from, late_price = EXCLUDED.late_price;
 
