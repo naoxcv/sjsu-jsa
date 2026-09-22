@@ -175,6 +175,54 @@ payment screenshot upload.
 Per-submission: enum mapping (form labels → DB values), duplicate branching (above),
 validity + price lookups, screenshot Drive URL capture, error-tab logging.
 
+## Payment auto-verification (agreed in principle 2026-09-22; design in progress)
+
+**Status:** New direction. Reverses the former "no verification automation beyond the
+screenshot + treasurer flow" rejection (see out-of-scope list). Agreed **in principle**
+only — the detailed design is still open. Treat this section as intent, not a finished
+spec; **do not implement until the open questions below are resolved.**
+
+**Goal:** cut the manual screenshot-eyeballing step by matching real Zelle/Venmo payment
+receipts against pending fees and auto-verifying **only high-confidence matches**.
+Everything uncertain still lands in the existing treasurer Pending Verifications queue —
+this augments that flow, it does not replace it. Cash has no receipt → always manual.
+
+**Input signal:** the treasurer's existing Google Apps Script parses Zelle/Venmo receipt
+emails from Gmail into a payment sheet (one row per received payment: payer name, amount,
+method, date). This sheet is an *input signal only*, the same role the signup form plays.
+Supabase stays the sole source of truth — this is NOT the rejected two-way Sheets sync.
+
+**Ordering (settled):** members always pay *before* submitting the form, so the receipt
+generally exists first. Therefore:
+- **Primary matcher = `onFormSubmit`** (event-driven): after inserting the pending fee,
+  scan already-logged receipts and auto-verify against a confident match.
+- **Catch-up hook in the treasurer's Gmail-parser script**: after appending a receipt,
+  look for a now-waiting pending fee. Covers the gap when that parser (time-driven, and
+  **external / pre-existing** — not part of this app's stack) processes the receipt email
+  *after* the form has already arrived.
+- One shared `matchFee_(fee, receipts)` serves both sides.
+
+**Confidence rule — all must hold to auto-verify, else stays pending:**
+- amount matches the expected `membership_plans` price (incl. late price), **and**
+- receipt method matches the fee's `payment_method`, **and**
+- payer name resolves to *exactly one* member with a `pending` fee for the current year.
+- **Name is a hint, never identity.** `student_id` remains the identity key; payments can
+  come from a parent's/roommate's account and names collide. **Never auto-verify on name
+  alone.**
+
+**Safety:**
+- Idempotency / anti-double-use: mark each receipt row *consumed* (matched fee_id/member)
+  on verify; the matcher skips consumed rows and only ever matches `pending` fees.
+- Auditability: record on the fee that it was auto-verified and from which receipt, so an
+  auto-verify is traceable and reversible.
+
+**Open questions (blocking implementation):**
+- Exact column layout + value formats of the treasurer's payment sheet (name field shape,
+  amount as `"$15.00"` vs `15`, one sheet vs one per service).
+- Name-matching algorithm + threshold (exact / normalized / fuzzy) and how aggressive.
+- Whether the parser catch-up hook earns its cross-project wiring, or `onFormSubmit` alone
+  suffices given the "pay before form" ordering.
+
 ## Rollout plan
 
 1. Schema migration in Supabase
@@ -192,11 +240,16 @@ validity + price lookups, screenshot Drive URL capture, error-tab logging.
   assignment via a separate later form)
 - Auto-updating member info from form resubmissions
 - Email notifications (failure or welcome)
-- Payment collection/verification automation beyond the screenshot + treasurer flow
-- Two-way Google Sheets sync (source of truth is Supabase, full stop)
+- ~~Payment collection/verification automation beyond the screenshot + treasurer flow~~
+  → **reversed 2026-09-22.** Now in scope; see "Payment auto-verification" above (in design).
+- Two-way Google Sheets sync (source of truth is Supabase, full stop). Note: the payment
+  auto-verification receipt sheet is a one-way *input* signal, not sync — this stays rejected.
 - Importing last year's data (all memberships expired; fresh start)
 - Supabase Auth / RLS policies (revisit only if the officer team grows or the file leaks)
-- Scheduled jobs of any kind (nothing time-driven exists in this stack)
+- Scheduled jobs in this app's stack (nothing time-driven runs in the admin tool or its
+  Apps Script bridge; the primary auto-verify matcher is event-driven `onFormSubmit`). The
+  treasurer's Gmail-parser script is time-driven but external / pre-existing — see
+  "Payment auto-verification."
 
 ## Hosting
 

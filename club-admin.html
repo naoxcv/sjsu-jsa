@@ -1381,11 +1381,34 @@ function renderFamColumn(fam) {
 /* =====================================================================
    VIEW: Pending verifications
    ===================================================================== */
+// View-local sort for the pending table. Persists across re-renders (and across
+// verify/reject actions, which re-call renderPending) but resets on reload.
+// Default matches the old behavior: newest submissions first.
+let pendingSort = { key: "paid_date", dir: "desc" };
+
+function sortPending(fees) {
+  const dir = pendingSort.dir === "asc" ? 1 : -1;
+  return fees.slice().sort((a, b) => {
+    if (pendingSort.key === "payment_method") {
+      const cmp = (a.payment_method || "").localeCompare(b.payment_method || "");
+      // Within one method, keep newest-first regardless of sort direction.
+      if (cmp !== 0) return cmp * dir;
+      return (b.paid_date || "").localeCompare(a.paid_date || "");
+    }
+    return (a.paid_date || "").localeCompare(b.paid_date || "") * dir;
+  });
+}
+
 function renderPending() {
   const root = $("#view-pending");
-  const pending = state.membershipFees
-    .filter((f) => f.status === "pending")
-    .sort((a, b) => (b.paid_date || "").localeCompare(a.paid_date || ""));
+  const pending = sortPending(state.membershipFees.filter((f) => f.status === "pending"));
+
+  const arrow = (key) =>
+    pendingSort.key === key
+      ? `<span aria-hidden="true"> ${pendingSort.dir === "asc" ? "▲" : "▼"}</span>`
+      : "";
+  const sortableAttrs = (key) =>
+    `class="sortable" data-sort="${key}" style="cursor:pointer; user-select:none;"`;
 
   root.innerHTML = `
     <div class="view-header">
@@ -1405,8 +1428,8 @@ function renderPending() {
                 <th>Year</th>
                 <th>Plan</th>
                 <th>Amount</th>
-                <th>Method</th>
-                <th>Submitted</th>
+                <th ${sortableAttrs("payment_method")}>Method${arrow("payment_method")}</th>
+                <th ${sortableAttrs("paid_date")}>Submitted${arrow("paid_date")}</th>
                 <th>Screenshot</th>
                 <th></th>
               </tr>
@@ -1422,6 +1445,18 @@ function renderPending() {
     </div>
   `;
 
+  $$("#view-pending th.sortable").forEach((th) => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.sort;
+      if (pendingSort.key === key) {
+        pendingSort.dir = pendingSort.dir === "asc" ? "desc" : "asc";
+      } else {
+        // New column: methods read best A→Z, dates newest-first.
+        pendingSort = { key, dir: key === "paid_date" ? "desc" : "asc" };
+      }
+      renderPending();
+    });
+  });
   $$("#view-pending tbody tr.clickable").forEach((row) => {
     row.addEventListener("click", () => {
       const fee = state.membershipFees.find((f) => idEq(f.fee_id, row.dataset.id));
