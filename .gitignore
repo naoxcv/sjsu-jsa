@@ -1,5 +1,6 @@
 .DS_Store
 config.js
+CLAUDE.md
 .claude/settings.local.json
 dist/
 .wrangler/
