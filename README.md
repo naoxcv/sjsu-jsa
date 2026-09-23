@@ -3,7 +3,9 @@
 A lightweight admin tool for managing a university club's membership: members,
 payment verification, and fam (small-group) rosters. New members sign up through
 a Google Form; a Google Apps Script bridges submissions into a Supabase database,
-and officers manage everything from a single-page admin tool.
+and officers manage everything from a single-page admin tool. The bridge also
+**auto-verifies payments** by matching high-confidence signups against the
+treasurer's finance ledger, leaving only uncertain ones for manual review.
 
 ## Stack
 
@@ -23,7 +25,7 @@ and officers manage everything from a single-page admin tool.
 | --- | --- |
 | `club-admin.html` | The admin tool (single-page app). |
 | `logic.js` | Pure business logic (fee status, validity, duplicate detection). |
-| `apps-script.gs` | Google Apps Script: signup form → Supabase. |
+| `apps-script.gs` | Google Apps Script: signup form → Supabase, plus payment auto-verification. |
 | `schema.sql` | Database schema. |
 | `migration.sql` | Schema migrations. |
 | `test/` | Unit tests for `logic.js`. |
@@ -62,3 +64,40 @@ npm test        # or: node --test
 
 This stages the app into `dist/` and deploys it to Cloudflare Pages
 (requires a local `wrangler` login).
+
+## Payment auto-verification
+
+The Apps Script bridge can auto-verify payments by matching pending fees against
+the treasurer's finance ledger (a Google Sheet). It only verifies **high-confidence,
+unambiguous matches** — method, amount (incl. late pricing), date, and payer name
+must all line up, and the match must be unique. Everything else stays `pending` for
+the treasurer. The ledger is **read-only** to the script; all state lives in Supabase.
+
+**Two entry points, one matcher:**
+
+- **`onFormSubmit`** — runs automatically on every signup. Since members pay before
+  submitting, most payments verify instantly at signup. Best-effort and isolated: a
+  ledger/matching error never fails the submission.
+- **Batch sweep** — run manually from the Apps Script editor to clear a backlog or
+  catch stragglers:
+  - `sweepDryRun()` — logs proposed matches, writes nothing (run this first).
+  - `sweepApply()` — commits the confident matches.
+  - `sweepDiagnose()` — categorizes every *unmatched* pending fee (wrong amount,
+    name mismatch, no receipt, duplicate, etc.).
+
+  All three log to a "Sweep Log" tab in the form-response sheet.
+
+**Configuration** (Apps Script → Project Settings → Script Properties):
+
+| Property | Purpose |
+| --- | --- |
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | Supabase REST access. |
+| `ACADEMIC_YEAR` | e.g. `2026-2027`; update at annual rollover. |
+| `LEDGER_SHEET_ID` | The finance ledger spreadsheet ID (from its URL). |
+| `LEDGER_TAB` | The ledger tab name, e.g. `Cashflow F26`. |
+
+The auto-verify features stay dormant until `LEDGER_SHEET_ID` and `LEDGER_TAB` are
+set, so submissions keep working even before the ledger is wired up. The executing
+account needs read access to the ledger (share it, or own it). The database needs
+the audit columns from `migration.sql` (`verified_at`, `verification_source`,
+`auto_match_ref`).

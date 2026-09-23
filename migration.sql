@@ -95,14 +95,34 @@ ALTER TABLE public.members
   ADD CONSTRAINT members_role_check
     CHECK (role::text = ANY (ARRAY['member'::character varying, 'president'::character varying, 'vice_president'::character varying, 'vp_finance'::character varying, 'vp_marketing'::character varying, 'vp_operations'::character varying, 'vp_events'::character varying, 'vp_mentorship'::character varying, 'vp_careers'::character varying, 'events_committee'::character varying, 'fams_committee'::character varying, 'skip_committee'::character varying, 'marketing_committee'::character varying]::text[]));
 
+-- 8. Payment auto-verification audit trail. A fee auto-verified from the
+--    treasurer's ledger records when, that it was automatic, and which receipt
+--    it matched (auto_match_ref = the content-hash key of that ledger row).
+--    auto_match_ref doubles as the idempotency marker: the sweep loads all
+--    existing keys and never re-uses a receipt. verification_source is 'auto'
+--    or 'manual' (null on pre-existing/mock rows).
+ALTER TABLE public.membership_fees
+  ADD COLUMN IF NOT EXISTS verified_at date,
+  ADD COLUMN IF NOT EXISTS verification_source text,
+  ADD COLUMN IF NOT EXISTS auto_match_ref text;
+
+ALTER TABLE public.membership_fees
+  DROP CONSTRAINT IF EXISTS membership_fees_verification_source_check;
+ALTER TABLE public.membership_fees
+  ADD CONSTRAINT membership_fees_verification_source_check
+    CHECK (verification_source IS NULL OR verification_source IN ('auto', 'manual'));
+
 COMMIT;
 
--- Seed 2026-2027 prices: $15/semester, $25/full year, +$5 after 9/18.
+-- Seed 2026-2027 prices: $15/semester, $25/full year, +$5 late.
+-- late_from is the FIRST day the late price applies (inclusive: paid_date >=
+-- late_from is late). On-time deadline is 9/18, so late starts 9/19 — set
+-- late_from to the day AFTER the deadline, not the deadline itself.
 -- (Semester 2's cutoff can be moved later by editing its late_from.)
 INSERT INTO public.membership_plans (academic_year, plan, price, late_from, late_price) VALUES
-  ('2026-2027', 'semester_1', 15.00, '2026-09-18', 20.00),
-  ('2026-2027', 'semester_2', 15.00, '2026-09-18', 20.00),
-  ('2026-2027', 'full_year', 25.00, '2026-09-18', 30.00)
+  ('2026-2027', 'semester_1', 15.00, '2026-09-19', 20.00),
+  ('2026-2027', 'semester_2', 15.00, '2026-09-19', 20.00),
+  ('2026-2027', 'full_year', 25.00, '2026-09-19', 30.00)
 ON CONFLICT (academic_year, plan) DO UPDATE
   SET price = EXCLUDED.price, late_from = EXCLUDED.late_from, late_price = EXCLUDED.late_price;
 

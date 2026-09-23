@@ -76,7 +76,130 @@ function hasOtherFeeThisYear(fee, allFees) {
   );
 }
 
-const Logic = { idEq, todayISO, isFeeActive, feeRowStatus, computeValidity, planPrice, hasOtherFeeThisYear };
+/* =====================================================================
+   Payment auto-verification matcher (pure core).
+
+   Given the pending fees, their members, and the parsed receipt rows from
+   the treasurer's ledger, return ONLY the high-confidence, unambiguous
+   fee↔receipt pairs that are safe to auto-verify. Everything uncertain is
+   left out and falls to the treasurer's manual queue.
+
+   The Apps Script side (apps-script.gs) mirrors these functions so the
+   sweep can run in that runtime, which can't require() this file. This is
+   the tested canonical copy — keep the mirror textually in sync.
+   ===================================================================== */
+
+// Name tokens, folded for comparison: diacritics stripped, lowercased,
+// anything non-alphabetic treated as a separator. "Núñez-Díaz" → [nunez,diaz].
+function normalizeNameTokens(s) {
+  return String(s == null ? "" : s)
+    .normalize("NFKD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase().replace(/[^a-z]+/g, " ")
+    .trim().split(/\s+/).filter(Boolean);
+}
+
+// Name is a HINT, never identity (CLAUDE.md): require the member's first AND
+// last name tokens to both appear in the payer string, order-independent and
+// tolerant of extra middle names / "Last, First". Nicknames and misspellings
+// deliberately fail here and fall to manual review rather than risk a false
+// auto-verify. No fuzzy/edit-distance matching.
+function nameTokensSubset(first, last, payerName) {
+  const need = normalizeNameTokens(first + " " + last);
+  if (need.length === 0) return false;
+  const have = Object.create(null);
+  normalizeNameTokens(payerName).forEach((t) => { have[t] = true; });
+  return need.every((t) => have[t]);
+}
+
+// Method-aware name match. Venmo/Zelle receipts carry full account names, so we
+// require the member's full name to appear in the payer string (strict). Cash
+// rows are hand-entered by the treasurer and sometimes carry only a first name,
+// so for the methods listed in firstNameOnlyMethods we ALSO accept a payer
+// string that is a subset of the member's name and includes their first name.
+// This stays safe because autoVerifyMatches still drops any receipt that
+// token-matches more than one member — a bare first name shared by two pending
+// members is ambiguous and falls to manual review.
+function nameMatches(first, last, payerName, method, firstNameOnlyMethods) {
+  const need = normalizeNameTokens(first + " " + last);
+  const have = normalizeNameTokens(payerName);
+  if (need.length === 0 || have.length === 0) return false;
+  const haveSet = Object.create(null);
+  have.forEach((t) => { haveSet[t] = true; });
+  if (need.every((t) => haveSet[t])) return true; // strict: full name present
+  if ((firstNameOnlyMethods || []).indexOf(method) >= 0) {
+    const needSet = Object.create(null);
+    need.forEach((t) => { needSet[t] = true; });
+    // payer ⊆ member name, and the member's first name is one of the tokens
+    if (haveSet[need[0]] && have.every((t) => needSet[t])) return true;
+  }
+  return false;
+}
+
+// Currency compared with a half-cent tolerance to dodge float noise.
+function amountsEqual(a, b) {
+  return Math.abs(Number(a) - Number(b)) < 0.005;
+}
+
+function isoToUTC_(iso) {
+  const parts = String(iso).slice(0, 10).split("-");
+  return Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+}
+function withinDays(isoA, isoB, n) {
+  return Math.abs(isoToUTC_(isoA) - isoToUTC_(isoB)) / 86400000 <= n;
+}
+
+// Returns [{ fee_id, receipt_key, receipt }] for the confident matches only.
+//   receipts: [{ method, date (ISO), amount (number), name, key }]
+//   membersById: { [member_id]: { first_name, last_name } }
+//   consumedKeys: receipt keys already used by a prior auto-verify (skipped)
+// Confidence rule — all must hold, else the fee stays pending:
+//   method matches, amount === expected membership_plans price (incl. late),
+//   receipt date within opts.windowDays of paid_date, and the payer name
+//   token-matches the member. Ambiguity in EITHER direction blocks the match:
+//   a receipt that matches more than one fee is dropped from all of them, and
+//   a fee is only auto-verified when exactly one receipt survives for it.
+function autoVerifyMatches(pendingFees, membersById, receipts, plans, consumedKeys, opts) {
+  const windowDays = (opts && opts.windowDays != null) ? opts.windowDays : 45;
+  const firstNameOnlyMethods = (opts && opts.firstNameOnlyMethods) || ["cash"];
+  const consumed = Object.create(null);
+  (consumedKeys || []).forEach((k) => { consumed[k] = true; });
+
+  const available = (receipts || []).filter(
+    (r) => r && r.key && !consumed[r.key] && r.name && Number(r.amount) > 0
+  );
+  const matchCount = new Map();
+  const feeCandidates = new Map();
+
+  (pendingFees || []).forEach((fee) => {
+    const member = membersById[fee.member_id];
+    if (!member) return;
+    const expected = planPrice(fee.academic_year, fee.plan, fee.paid_date, plans);
+    if (expected == null) return;
+    const cands = available.filter(
+      (r) =>
+        r.method === fee.payment_method &&
+        amountsEqual(r.amount, expected) &&
+        withinDays(r.date, fee.paid_date, windowDays) &&
+        nameMatches(member.first_name, member.last_name, r.name, r.method, firstNameOnlyMethods)
+    );
+    feeCandidates.set(fee.fee_id, cands);
+    cands.forEach((r) => matchCount.set(r, (matchCount.get(r) || 0) + 1));
+  });
+
+  const result = [];
+  (pendingFees || []).forEach((fee) => {
+    const cands = (feeCandidates.get(fee.fee_id) || []).filter((r) => matchCount.get(r) === 1);
+    if (cands.length === 1) {
+      result.push({ fee_id: fee.fee_id, receipt_key: cands[0].key, receipt: cands[0] });
+    }
+  });
+  return result;
+}
+
+const Logic = {
+  idEq, todayISO, isFeeActive, feeRowStatus, computeValidity, planPrice, hasOtherFeeThisYear,
+  normalizeNameTokens, nameTokensSubset, nameMatches, amountsEqual, withinDays, autoVerifyMatches,
+};
 
 if (typeof module === "object" && module.exports) {
   module.exports = Logic;
