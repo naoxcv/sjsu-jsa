@@ -74,13 +74,12 @@ var GENDER_MAP = {
    Venmo, then Zelle, then Cash. Each table ends in a running-sum row (a cell
    reading "Funds"). Columns: A = date (M/D/YYYY), B = amount, C = payer name,
    D = message. A treasurer-recorded cash row IS official, so cash is matched
-   too; cash rows sometimes carry only a first name (see FIRST_NAME_ONLY_METHODS).
+   too — but auto-verify requires the member's FULL name in the payer cell (a
+   first name alone can't identify who paid, so first-name-only rows go manual).
 
    The ledger spreadsheet ID and tab name live in Script Properties
    (LEDGER_SHEET_ID, LEDGER_TAB), not here — same as the Supabase creds — so
    they stay out of the source and can change without editing code. */
-var MATCH_METHODS = ["venmo", "zelle", "cash"];
-var FIRST_NAME_ONLY_METHODS = ["cash"];      // methods where a first-name-only payer may match
 var MATCH_WINDOW_DAYS = 45;                   // receipt must be within N days of the form's paid_date
 
 function onFormSubmit(e) {
@@ -230,9 +229,22 @@ function computeAutoMatches_(academicYear) {
 
   var matches = autoVerifyMatches_(pending, membersById, receipts, plans, Object.keys(usedMap), {
     windowDays: MATCH_WINDOW_DAYS,
-    firstNameOnlyMethods: FIRST_NAME_ONLY_METHODS,
+    duplicateMemberIds: duplicateMemberIds_(allFees),
   });
   return { matches: matches, pending: pending, membersById: membersById, receiptCount: receipts.length };
+}
+
+// member_ids with >1 pending/verified fee this year — the "already has a fee
+// this year" clusters (double-submits, sem1→full_year upgrades) that CLAUDE.md
+// reserves for the treasurer. Rejected fees don't count toward the cluster.
+function duplicateMemberIds_(allFees) {
+  var counts = {};
+  allFees.forEach(function (f) {
+    if (f.status === "pending" || f.status === "verified") {
+      counts[f.member_id] = (counts[f.member_id] || 0) + 1;
+    }
+  });
+  return Object.keys(counts).filter(function (id) { return counts[id] > 1; });
 }
 
 // Idempotent verify: only flips a row that is STILL pending. return=representation
@@ -289,19 +301,24 @@ function sweepDiagnose_() {
 
 // Returns { code, detail } explaining why one pending fee didn't auto-verify.
 function diagnoseFee_(fee, member, expected, receipts, allFees, consumedBy) {
-  var dup = allFees.filter(function (f) {
-    return !idEq_(f.fee_id, fee.fee_id) && idEq_(f.member_id, fee.member_id) && f.status === "verified";
+  var others = allFees.filter(function (f) {
+    return !idEq_(f.fee_id, fee.fee_id) && idEq_(f.member_id, fee.member_id) &&
+      (f.status === "verified" || f.status === "pending");
   });
-  if (dup.length) return { code: "DUPLICATE", detail: "member already verified via fee " + dup[0].fee_id };
+  if (others.length) {
+    var verified = others.filter(function (f) { return f.status === "verified"; })[0];
+    return { code: "DUPLICATE", detail: verified
+      ? "member already verified via fee " + verified.fee_id + " — treasurer resolves"
+      : "member has " + (others.length + 1) + " pending fees this year — treasurer resolves" };
+  }
 
   if (expected == null) return { code: "NO_PRICE", detail: "no membership_plans row for " + fee.plan };
 
-  var fnOnly = FIRST_NAME_ONLY_METHODS;
   var methodRx = receipts.filter(function (r) { return r.method === fee.payment_method; });
   if (!methodRx.length) return { code: "NO_RECEIPT", detail: "no " + fee.payment_method + " rows in ledger" };
 
   var nameRx = methodRx.filter(function (r) {
-    return nameMatches_(member.first_name, member.last_name, r.name, r.method, fnOnly);
+    return nameTokensSubset_(member.first_name, member.last_name, r.name);
   });
   var nameAmt = nameRx.filter(function (r) { return amountsEqual_(r.amount, expected); });
   var nameAmtWin = nameAmt.filter(function (r) { return withinDays_(r.date, fee.paid_date, MATCH_WINDOW_DAYS); });
@@ -336,8 +353,8 @@ function diagnoseFee_(fee, member, expected, receipts, allFees, consumedBy) {
 }
 
 // Parse the ledger's stacked inflow tables into normalized receipt rows.
-// READ-ONLY. Segments Venmo/Zelle/Cash by the "Funds" running-sum rows; only
-// rows whose method is in MATCH_METHODS are returned.
+// READ-ONLY. Segments the Venmo/Zelle/Cash tables by the "Funds" running-sum
+// rows and tags each row with its table's method.
 function readLedgerReceipts_() {
   var ledgerId = prop_("LEDGER_SHEET_ID");
   var ledgerTab = prop_("LEDGER_TAB");
@@ -356,7 +373,6 @@ function readLedgerReceipts_() {
     if (isSummaryRow_(row)) { idx++; continue; }      // "Funds ..." ends a table
     if (idx >= methods.length) break;                  // past the cash table
     var method = methods[idx];
-    if (MATCH_METHODS.indexOf(method) < 0) continue;   // skip cash rows
 
     var d = toDate_(row[0]);
     if (!d) continue;                                   // header/label/blank row
@@ -377,13 +393,12 @@ function readLedgerReceipts_() {
   return out;
 }
 
-// A running-sum row carries the word "Funds" (or "Total") in some cell.
+// A running-sum row starts column A with "Funds" — the only column checked.
+// Scanning other columns would let free text elsewhere (e.g. a payer note
+// "Funds for JSA" in the column-D message) forge a table boundary and silently
+// reclassify every row below it.
 function isSummaryRow_(row) {
-  for (var i = 0; i < row.length; i++) {
-    var s = String(row[i] == null ? "" : row[i]).trim().toLowerCase();
-    if (s === "funds" || s.indexOf("funds") === 0 || s === "total") return true;
-  }
-  return false;
+  return String(row[0] == null ? "" : row[0]).trim().toLowerCase().indexOf("funds") === 0;
 }
 
 function toDate_(v) {
@@ -428,7 +443,7 @@ function usedReceiptKeys_(allFees, membersById, receipts, plans) {
       if (r.method === fee.payment_method &&
           amountsEqual_(r.amount, expected) &&
           withinDays_(r.date, fee.paid_date, MATCH_WINDOW_DAYS) &&
-          nameMatches_(m.first_name, m.last_name, r.name, r.method, FIRST_NAME_ONLY_METHODS)) {
+          nameTokensSubset_(m.first_name, m.last_name, r.name)) {
         used[r.key] = fee.fee_id;
       }
     });
@@ -461,20 +476,6 @@ function nameTokensSubset_(first, last, payerName) {
   normalizeNameTokens_(payerName).forEach(function (t) { have[t] = true; });
   return need.every(function (t) { return have[t]; });
 }
-function nameMatches_(first, last, payerName, method, firstNameOnlyMethods) {
-  var need = normalizeNameTokens_(first + " " + last);
-  var have = normalizeNameTokens_(payerName);
-  if (need.length === 0 || have.length === 0) return false;
-  var haveSet = {};
-  have.forEach(function (t) { haveSet[t] = true; });
-  if (need.every(function (t) { return haveSet[t]; })) return true;
-  if ((firstNameOnlyMethods || []).indexOf(method) >= 0) {
-    var needSet = {};
-    need.forEach(function (t) { needSet[t] = true; });
-    if (haveSet[need[0]] && have.every(function (t) { return needSet[t]; })) return true;
-  }
-  return false;
-}
 function amountsEqual_(a, b) { return Math.abs(Number(a) - Number(b)) < 0.005; }
 function isoToUTC__(iso) {
   var p = String(iso).slice(0, 10).split("-");
@@ -494,7 +495,8 @@ function idEq_(a, b) {
 }
 function autoVerifyMatches_(pendingFees, membersById, receipts, plans, consumedKeys, opts) {
   var windowDays = (opts && opts.windowDays != null) ? opts.windowDays : 45;
-  var firstNameOnlyMethods = (opts && opts.firstNameOnlyMethods) || ["cash"];
+  var duplicateMembers = {};
+  ((opts && opts.duplicateMemberIds) || []).forEach(function (id) { duplicateMembers[String(id)] = true; });
   var consumed = {};
   (consumedKeys || []).forEach(function (k) { consumed[k] = true; });
 
@@ -514,7 +516,7 @@ function autoVerifyMatches_(pendingFees, membersById, receipts, plans, consumedK
       return r.method === fee.payment_method &&
         amountsEqual_(r.amount, expected) &&
         withinDays_(r.date, fee.paid_date, windowDays) &&
-        nameMatches_(member.first_name, member.last_name, r.name, r.method, firstNameOnlyMethods);
+        nameTokensSubset_(member.first_name, member.last_name, r.name);
     });
     feeCand[fee.fee_id] = cands;
     cands.forEach(function (r) { counts[r.__i]++; });
@@ -522,6 +524,7 @@ function autoVerifyMatches_(pendingFees, membersById, receipts, plans, consumedK
 
   var result = [];
   (pendingFees || []).forEach(function (fee) {
+    if (duplicateMembers[String(fee.member_id)]) return; // treasurer resolves duplicates
     var cands = (feeCand[fee.fee_id] || []).filter(function (r) { return counts[r.__i] === 1; });
     if (cands.length === 1) {
       result.push({ fee_id: fee.fee_id, receipt_key: cands[0].key, receipt: cands[0] });

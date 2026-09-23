@@ -10,7 +10,6 @@ const {
   hasOtherFeeThisYear,
   normalizeNameTokens,
   nameTokensSubset,
-  nameMatches,
   amountsEqual,
   withinDays,
   autoVerifyMatches,
@@ -201,27 +200,6 @@ describe("name matching", () => {
   });
 });
 
-describe("nameMatches (method-aware)", () => {
-  const cashOnly = ["cash"];
-  test("full name matches for any method", () => {
-    assert.equal(nameMatches("Jane", "Doe", "Jane Doe", "venmo", cashOnly), true);
-    assert.equal(nameMatches("Jane", "Doe", "Jane Doe", "cash", cashOnly), true);
-  });
-  test("first-name-only matches for cash", () => {
-    assert.equal(nameMatches("Jane", "Doe", "Jane", "cash", cashOnly), true);
-  });
-  test("first-name-only does NOT match for venmo/zelle", () => {
-    assert.equal(nameMatches("Jane", "Doe", "Jane", "venmo", cashOnly), false);
-    assert.equal(nameMatches("Jane", "Doe", "Jane", "zelle", cashOnly), false);
-  });
-  test("cash with a wrong last name does not match", () => {
-    assert.equal(nameMatches("Jane", "Doe", "Jane Smith", "cash", cashOnly), false);
-  });
-  test("cash last-name-only does not match (must include first name)", () => {
-    assert.equal(nameMatches("Jane", "Doe", "Doe", "cash", cashOnly), false);
-  });
-});
-
 describe("autoVerifyMatches", () => {
   const plans = [
     { academic_year: "2026-2027", plan: "semester_1", price: 15, late_from: "2026-09-18", late_price: 20 },
@@ -302,22 +280,49 @@ describe("autoVerifyMatches", () => {
     assert.deepEqual(out, []);
   });
 
-  test("cash first-name-only auto-verifies a lone matching member", () => {
+  test("cash with a FULL name auto-verifies (cash still matches)", () => {
     const cashFee = fee({ payment_method: "cash" });
-    const cashReceipt = receipt({ method: "cash", name: "Jane", key: "kc" });
+    const cashReceipt = receipt({ method: "cash", name: "Jane Doe", key: "kc" });
     const out = autoVerifyMatches([cashFee], membersById, [cashReceipt], plans, []);
     assert.deepEqual(out.map((m) => m.receipt_key), ["kc"]);
   });
 
-  test("cash first-name shared by two pending members stays manual", () => {
-    // member 1 Jane Doe, add a second pending Jane (different last name).
-    const members = Object.assign({}, membersById, { 4: { first_name: "Jane", last_name: "Roe" } });
-    const fees = [
-      fee({ fee_id: 10, member_id: 1, payment_method: "cash" }),
-      fee({ fee_id: 12, member_id: 4, payment_method: "cash" }),
-    ];
+  test("cash first-name-only does NOT auto-verify (full name required)", () => {
+    // A bare first name can't identify the payer — must stay manual, otherwise
+    // it could bind to whichever same-named member happens to be pending first.
+    const cashFee = fee({ payment_method: "cash" });
     const cashReceipt = receipt({ method: "cash", name: "Jane", key: "kc" });
-    const out = autoVerifyMatches(fees, members, [cashReceipt], plans, []);
+    const out = autoVerifyMatches([cashFee], membersById, [cashReceipt], plans, []);
+    assert.deepEqual(out, []);
+  });
+
+  test("member with two DISTINCT receipts (upgrade/double-submit) auto-verifies NEITHER", () => {
+    // member 1 has a sem1 ($20 late) and a full_year ($30 late) pending fee,
+    // each with its own matching receipt. Without the duplicate guard both would
+    // verify; with it, the whole cluster is left for the treasurer.
+    const fees = [
+      fee({ fee_id: 10, member_id: 1, plan: "semester_1" }),
+      fee({ fee_id: 11, member_id: 1, plan: "full_year" }),
+    ];
+    const receipts = [
+      receipt({ key: "r1", amount: 20, name: "Jane Doe" }),
+      receipt({ key: "r2", amount: 30, name: "Jane Doe" }),
+    ];
+    const out = autoVerifyMatches(fees, membersById, receipts, plans, [], { duplicateMemberIds: [1] });
+    assert.deepEqual(out, []);
+  });
+
+  test("duplicate member's fee is skipped but still blocks a shared receipt", () => {
+    // member 1 (duplicate) and member 3 both match one receipt → it's ambiguous.
+    // member 1 is skipped for being a duplicate; member 3 must NOT sneak through
+    // on that shared receipt.
+    const fees = [
+      fee({ fee_id: 10, member_id: 1 }),
+      fee({ fee_id: 11, member_id: 1 }),
+      fee({ fee_id: 30, member_id: 3, payment_method: "venmo" }),
+    ];
+    const membersDup = Object.assign({}, membersById, { 3: { first_name: "Jane", last_name: "Doe" } });
+    const out = autoVerifyMatches(fees, membersDup, [receipt({ key: "shared" })], plans, [], { duplicateMemberIds: [1] });
     assert.deepEqual(out, []);
   });
 

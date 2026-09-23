@@ -1175,6 +1175,8 @@ function renderPaymentForm(m) {
         valid_from: dates.valid_from,
         valid_until: dates.valid_until,
         status: "verified",   // treasurer records the payment directly — no pending step
+        verified_at: todayISO(),
+        verification_source: "manual",
       };
       const { error } = await db.from("membership_fees").insert(row);
       if (error) throw error;
@@ -1799,6 +1801,8 @@ function renderVerifyForm(f) {
           paid_date: fd.get("paid_date"),
           valid_from: fd.get("valid_from"),
           valid_until: fd.get("valid_until"),
+          verified_at: todayISO(),
+          verification_source: "manual",
         });
       }
       const { error } = await db.from("membership_fees").update(updates).eq("fee_id", f.fee_id);

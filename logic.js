@@ -111,30 +111,6 @@ function nameTokensSubset(first, last, payerName) {
   return need.every((t) => have[t]);
 }
 
-// Method-aware name match. Venmo/Zelle receipts carry full account names, so we
-// require the member's full name to appear in the payer string (strict). Cash
-// rows are hand-entered by the treasurer and sometimes carry only a first name,
-// so for the methods listed in firstNameOnlyMethods we ALSO accept a payer
-// string that is a subset of the member's name and includes their first name.
-// This stays safe because autoVerifyMatches still drops any receipt that
-// token-matches more than one member — a bare first name shared by two pending
-// members is ambiguous and falls to manual review.
-function nameMatches(first, last, payerName, method, firstNameOnlyMethods) {
-  const need = normalizeNameTokens(first + " " + last);
-  const have = normalizeNameTokens(payerName);
-  if (need.length === 0 || have.length === 0) return false;
-  const haveSet = Object.create(null);
-  have.forEach((t) => { haveSet[t] = true; });
-  if (need.every((t) => haveSet[t])) return true; // strict: full name present
-  if ((firstNameOnlyMethods || []).indexOf(method) >= 0) {
-    const needSet = Object.create(null);
-    need.forEach((t) => { needSet[t] = true; });
-    // payer ⊆ member name, and the member's first name is one of the tokens
-    if (haveSet[need[0]] && have.every((t) => needSet[t])) return true;
-  }
-  return false;
-}
-
 // Currency compared with a half-cent tolerance to dodge float noise.
 function amountsEqual(a, b) {
   return Math.abs(Number(a) - Number(b)) < 0.005;
@@ -158,9 +134,16 @@ function withinDays(isoA, isoB, n) {
 //   token-matches the member. Ambiguity in EITHER direction blocks the match:
 //   a receipt that matches more than one fee is dropped from all of them, and
 //   a fee is only auto-verified when exactly one receipt survives for it.
+// Duplicate guard: a fee whose member has another pending/verified fee this year
+//   (member_id in opts.duplicateMemberIds) is NEVER auto-verified — per CLAUDE.md,
+//   the "already has a fee this year" cluster (double-submits, sem1→full_year
+//   upgrades) is the treasurer's to resolve, not the matcher's. Those fees still
+//   take part in the ambiguity computation below, so they keep blocking any
+//   receipt they could plausibly claim.
 function autoVerifyMatches(pendingFees, membersById, receipts, plans, consumedKeys, opts) {
   const windowDays = (opts && opts.windowDays != null) ? opts.windowDays : 45;
-  const firstNameOnlyMethods = (opts && opts.firstNameOnlyMethods) || ["cash"];
+  const duplicateMembers = Object.create(null);
+  ((opts && opts.duplicateMemberIds) || []).forEach((id) => { duplicateMembers[String(id)] = true; });
   const consumed = Object.create(null);
   (consumedKeys || []).forEach((k) => { consumed[k] = true; });
 
@@ -180,7 +163,7 @@ function autoVerifyMatches(pendingFees, membersById, receipts, plans, consumedKe
         r.method === fee.payment_method &&
         amountsEqual(r.amount, expected) &&
         withinDays(r.date, fee.paid_date, windowDays) &&
-        nameMatches(member.first_name, member.last_name, r.name, r.method, firstNameOnlyMethods)
+        nameTokensSubset(member.first_name, member.last_name, r.name)
     );
     feeCandidates.set(fee.fee_id, cands);
     cands.forEach((r) => matchCount.set(r, (matchCount.get(r) || 0) + 1));
@@ -188,6 +171,7 @@ function autoVerifyMatches(pendingFees, membersById, receipts, plans, consumedKe
 
   const result = [];
   (pendingFees || []).forEach((fee) => {
+    if (duplicateMembers[String(fee.member_id)]) return; // treasurer resolves duplicates
     const cands = (feeCandidates.get(fee.fee_id) || []).filter((r) => matchCount.get(r) === 1);
     if (cands.length === 1) {
       result.push({ fee_id: fee.fee_id, receipt_key: cands[0].key, receipt: cands[0] });
@@ -198,7 +182,7 @@ function autoVerifyMatches(pendingFees, membersById, receipts, plans, consumedKe
 
 const Logic = {
   idEq, todayISO, isFeeActive, feeRowStatus, computeValidity, planPrice, hasOtherFeeThisYear,
-  normalizeNameTokens, nameTokensSubset, nameMatches, amountsEqual, withinDays, autoVerifyMatches,
+  normalizeNameTokens, nameTokensSubset, amountsEqual, withinDays, autoVerifyMatches,
 };
 
 if (typeof module === "object" && module.exports) {

@@ -69,9 +69,12 @@ This stages the app into `dist/` and deploys it to Cloudflare Pages
 
 The Apps Script bridge can auto-verify payments by matching pending fees against
 the treasurer's finance ledger (a Google Sheet). It only verifies **high-confidence,
-unambiguous matches** — method, amount (incl. late pricing), date, and payer name
-must all line up, and the match must be unique. Everything else stays `pending` for
-the treasurer. The ledger is **read-only** to the script; all state lives in Supabase.
+unambiguous matches** — method, amount (incl. late pricing), date, and the member's
+**full name** must all line up, and the match must be unique. Everything else stays
+`pending` for the treasurer. Cash is matched too (a recorded cash row is official),
+but ledger rows that carry only a first name can't identify the payer, so they go to
+the manual queue — log full names to auto-verify them. The ledger is **read-only** to
+the script; all state lives in Supabase.
 
 **Two entry points, one matcher:**
 
