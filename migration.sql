@@ -112,6 +112,16 @@ ALTER TABLE public.membership_fees
   ADD CONSTRAINT membership_fees_verification_source_check
     CHECK (verification_source IS NULL OR verification_source IN ('auto', 'manual'));
 
+-- 9. Drop UNIQUE (member_id, academic_year, plan). It contradicted the
+--    documented duplicate handling: a repeat/upgrade/re-signup submission is
+--    meant to insert another pending fee that the treasurer reconciles in the
+--    pending queue, not fail at the DB. The constraint ignored status, so it
+--    also blocked a legitimate resubmission after a prior fee was rejected.
+--    (Was dropped directly on the live DB; recorded here so replays match. Never
+--    existed in schema.sql, so from-scratch builds were already correct.)
+ALTER TABLE public.membership_fees
+  DROP CONSTRAINT IF EXISTS membership_fees_member_id_academic_year_plan_key;
+
 COMMIT;
 
 -- Seed 2026-2027 prices: $15/semester, $25/full year, +$5 late.
