@@ -430,6 +430,34 @@
   .fam-member-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .fam-empty { padding: 20px 18px; color: var(--text-soft); font-size: 13px; font-style: italic; text-align: center; }
 
+  /* ---------- Fam arrange (drag & drop) mode ---------- */
+  .fam-toolbar { display: flex; gap: 8px; align-items: center; }
+  .fam-toolbar .pending-count { font-size: 12px; color: var(--text-muted); }
+  .fam-column.arranging .fam-members { min-height: 56px; }
+  .fam-member.draggable { cursor: grab; }
+  .fam-member.draggable:active { cursor: grabbing; }
+  .fam-member.dragging { opacity: 0.4; }
+  .fam-member.moved { border-left: 3px solid var(--accent); }
+  .fam-members.drop-over { background: var(--bg); box-shadow: inset 0 0 0 2px var(--accent); }
+  .fam-drop-hint { padding: 18px; color: var(--text-soft); font-size: 12px; font-style: italic; text-align: center; }
+  .fam-unassigned {
+    margin-top: 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .fam-unassigned .fam-header { background: var(--text-soft); }
+  .fam-unassigned-body { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 18px; min-height: 56px; }
+  .fam-unassigned-body.drop-over { background: var(--bg); box-shadow: inset 0 0 0 2px var(--accent); }
+  .fam-unassigned-body .fam-member {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    background: var(--surface);
+  }
+  .fam-unassigned-body .fam-member:hover { background: var(--bg); }
+
   /* ---------- Toast ---------- */
   .toast-region {
     position: fixed;
@@ -665,6 +693,7 @@ function updatePendingCount() {
 function setView(view, params = {}) {
   state.currentView = view;
   if (view === "detail") state.selectedMemberId = params.memberId;
+  if (view !== "fams") famArrangeMode = false; // don't carry drag mode across views
 
   $$(".view").forEach((v) => v.classList.add("hidden"));
   const viewId = view === "detail" ? "view-detail" : `view-${view}`;
@@ -1146,6 +1175,8 @@ function renderPaymentForm(m) {
         valid_from: dates.valid_from,
         valid_until: dates.valid_until,
         status: "verified",   // treasurer records the payment directly — no pending step
+        verified_at: todayISO(),
+        verification_source: "manual",
       };
       const { error } = await db.from("membership_fees").insert(row);
       if (error) throw error;
@@ -1298,10 +1329,14 @@ function renderAddForm() {
 /* =====================================================================
    VIEW: Fam rosters
    ===================================================================== */
-function renderFams() {
-  const root = $("#view-fams");
+// When true, the fams view renders draggable cards + Save/Cancel instead of
+// the read-only roster. Module-scoped so it survives re-renders within the
+// view; reset by Save, Cancel, or navigating away (setView).
+let famArrangeMode = false;
+
+function sortedFamsList() {
   const desiredOrder = ["Ryu", "Tsuru", "Kitsune", "Koi"];
-  const sortedFams = state.fams.slice().sort((a, b) => {
+  return state.fams.slice().sort((a, b) => {
     const ia = desiredOrder.indexOf(a.name);
     const ib = desiredOrder.indexOf(b.name);
     if (ia === -1 && ib === -1) return a.name.localeCompare(b.name);
@@ -1309,27 +1344,55 @@ function renderFams() {
     if (ib === -1) return -1;
     return ia - ib;
   });
+}
+
+function renderFams() {
+  const root = $("#view-fams");
+  const sortedFams = sortedFamsList();
+  const arranging = famArrangeMode && sortedFams.length > 0;
+
+  const actions = arranging
+    ? `<div class="fam-toolbar">
+         <span class="pending-count" id="fam-pending-count"></span>
+         <button type="button" class="btn-ghost" id="fam-cancel">Cancel</button>
+         <button type="button" class="btn-primary" id="fam-save" disabled>Save changes</button>
+       </div>`
+    : sortedFams.length > 0
+      ? `<div class="fam-toolbar"><button type="button" class="btn" id="fam-arrange">Arrange fams</button></div>`
+      : "";
+
+  const subtitle = arranging
+    ? "Drag members between fams, then Save. Moving to a different fam resets them to a plain member role."
+    : "Current members grouped by fam.";
 
   root.innerHTML = `
     <div class="view-header">
       <div class="view-header-inner">
         <h1>Fam rosters</h1>
-        <p>Current members grouped by fam.</p>
+        <p>${subtitle}</p>
       </div>
+      ${actions}
     </div>
     <div class="fam-grid">
       ${sortedFams.length === 0
         ? `<div class="empty-state" style="grid-column:1/-1;">No fams defined yet.</div>`
-        : sortedFams.map(renderFamColumn).join("")}
+        : sortedFams.map((f) => renderFamColumn(f, arranging)).join("")}
     </div>
+    ${arranging ? renderUnassignedPool() : ""}
   `;
 
-  $$(".fam-member").forEach((el) => {
-    el.addEventListener("click", () => setView("detail", { memberId: el.dataset.id }));
-  });
+  if (arranging) {
+    wireFamArrange();
+  } else {
+    $$(".fam-member").forEach((el) => {
+      el.addEventListener("click", () => setView("detail", { memberId: el.dataset.id }));
+    });
+    const arrangeBtn = $("#fam-arrange");
+    if (arrangeBtn) arrangeBtn.addEventListener("click", () => { famArrangeMode = true; renderFams(); });
+  }
 }
 
-function renderFamColumn(fam) {
+function renderFamColumn(fam, arranging = false) {
   const members = state.famMemberships
     .filter((fm) => idEq(fm.fam_id, fam.fam_id) && fm.is_current)
     .map((fm) => {
@@ -1346,46 +1409,227 @@ function renderFamColumn(fam) {
     });
 
   return `
-    <div class="fam-column">
+    <div class="fam-column${arranging ? " arranging" : ""}">
       <div class="fam-header" style="background:${escapeHtml(fam.color)}">
         <div class="fam-name">${escapeHtml(fam.name)}</div>
         <div class="fam-count">${members.length} member${members.length === 1 ? "" : "s"}</div>
       </div>
       ${fam.description ? `<div class="fam-desc">${escapeHtml(fam.description)}</div>` : ""}
-      <div class="fam-members">
+      <div class="fam-members" data-fam-id="${fam.fam_id}">
         ${members.length === 0
-          ? `<div class="fam-empty">No members yet</div>`
-          : members.map((m) => {
-              const feeActive = isFeeActive(m, state.membershipFees);
-              const leaderTag = m.fam_role !== "member"
-                ? `<span class="badge badge-neutral">${escapeHtml(prettyLabel(m.fam_role))}</span>`
-                : "";
-              return `
-                <div class="fam-member" data-id="${m.member_id}">
-                  <div class="fam-member-name">${escapeHtml(m.first_name)} ${escapeHtml(m.last_name)}</div>
-                  <div class="fam-member-meta">
-                    <span class="badge badge-role">${escapeHtml(roleLabel(m.role))}</span>
-                    ${leaderTag}
-                    ${feeActive
-                      ? `<span class="badge badge-active"><span class="dot"></span>Active</span>`
-                      : `<span class="badge badge-unpaid"><span class="dot"></span>Unpaid</span>`}
-                  </div>
-                </div>
-              `;
-            }).join("")}
+          ? (arranging
+              ? `<div class="fam-drop-hint">Drop members here</div>`
+              : `<div class="fam-empty">No members yet</div>`)
+          : members.map((m) => renderFamMemberCard(m, arranging)).join("")}
       </div>
     </div>
   `;
 }
 
+function renderFamMemberCard(m, arranging) {
+  const feeActive = isFeeActive(m, state.membershipFees);
+  const leaderTag = m.fam_role && m.fam_role !== "member"
+    ? `<span class="badge badge-neutral">${escapeHtml(prettyLabel(m.fam_role))}</span>`
+    : "";
+  return `
+    <div class="fam-member${arranging ? " draggable" : ""}" data-id="${m.member_id}"${arranging ? ' draggable="true"' : ""}>
+      <div class="fam-member-name">${escapeHtml(m.first_name)} ${escapeHtml(m.last_name)}</div>
+      <div class="fam-member-meta">
+        <span class="badge badge-role">${escapeHtml(roleLabel(m.role))}</span>
+        ${leaderTag}
+        ${feeActive
+          ? `<span class="badge badge-active"><span class="dot"></span>Active</span>`
+          : `<span class="badge badge-unpaid"><span class="dot"></span>Unpaid</span>`}
+      </div>
+    </div>
+  `;
+}
+
+// Active members with no current fam — draggable into any fam. An empty
+// data-fam-id marks this as the "remove from fam" drop zone.
+function renderUnassignedPool() {
+  const assigned = new Set(
+    state.famMemberships.filter((fm) => fm.is_current).map((fm) => String(fm.member_id))
+  );
+  const unassigned = state.members
+    .filter((m) => m.is_active && !assigned.has(String(m.member_id)))
+    .sort((a, b) => (a.last_name || "").localeCompare(b.last_name || ""));
+
+  return `
+    <div class="fam-unassigned">
+      <div class="fam-header">
+        <div class="fam-name">Unassigned</div>
+        <div class="fam-count">${unassigned.length} member${unassigned.length === 1 ? "" : "s"}</div>
+      </div>
+      <div class="fam-unassigned-body" data-fam-id="">
+        ${unassigned.length === 0
+          ? `<div class="fam-drop-hint">Drop here to remove from a fam</div>`
+          : unassigned.map((m) => renderFamMemberCard(m, true)).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function wireFamArrange() {
+  // Original fam per card (fam_id string, "" = unassigned), snapshotted from
+  // the freshly-rendered DOM so it reflects saved state.
+  const original = {};
+  $$("#view-fams .fam-member").forEach((card) => {
+    const zone = card.closest("[data-fam-id]");
+    original[card.dataset.id] = zone ? zone.dataset.famId : "";
+  });
+
+  let dragged = null;
+
+  $$("#view-fams .fam-member.draggable").forEach((card) => {
+    card.addEventListener("dragstart", (e) => {
+      dragged = card;
+      card.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", card.dataset.id);
+    });
+    card.addEventListener("dragend", () => {
+      card.classList.remove("dragging");
+      dragged = null;
+      $$("#view-fams .drop-over").forEach((z) => z.classList.remove("drop-over"));
+    });
+  });
+
+  $$("#view-fams [data-fam-id]").forEach((zone) => {
+    zone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      zone.classList.add("drop-over");
+    });
+    zone.addEventListener("dragleave", (e) => {
+      if (!zone.contains(e.relatedTarget)) zone.classList.remove("drop-over");
+    });
+    zone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      zone.classList.remove("drop-over");
+      if (dragged) { zone.appendChild(dragged); recomputeFamArrange(original); }
+    });
+  });
+
+  recomputeFamArrange(original);
+  $("#fam-cancel").addEventListener("click", () => { famArrangeMode = false; renderFams(); });
+  $("#fam-save").addEventListener("click", () => saveFamArrange(original));
+}
+
+function recomputeFamArrange(original) {
+  let changes = 0;
+  $$("#view-fams .fam-member").forEach((card) => {
+    const zone = card.closest("[data-fam-id]");
+    const now = zone ? zone.dataset.famId : "";
+    const moved = now !== (original[card.dataset.id] ?? "");
+    card.classList.toggle("moved", moved);
+    if (moved) changes++;
+  });
+
+  // Keep empty zones showing a drop hint, and live-update the per-column counts.
+  $$("#view-fams [data-fam-id]").forEach((zone) => {
+    const hasCards = !!zone.querySelector(".fam-member");
+    let hint = zone.querySelector(".fam-drop-hint");
+    if (!hasCards && !hint) {
+      hint = document.createElement("div");
+      hint.className = "fam-drop-hint";
+      hint.textContent = zone.dataset.famId ? "Drop members here" : "Drop here to remove from a fam";
+      zone.appendChild(hint);
+    } else if (hasCards && hint) {
+      hint.remove();
+    }
+    const countEl = zone.closest(".fam-column, .fam-unassigned")?.querySelector(".fam-count");
+    if (countEl) {
+      const n = zone.querySelectorAll(".fam-member").length;
+      countEl.textContent = `${n} member${n === 1 ? "" : "s"}`;
+    }
+  });
+
+  const saveBtn = $("#fam-save");
+  const label = $("#fam-pending-count");
+  if (saveBtn) saveBtn.disabled = changes === 0;
+  if (label) label.textContent = changes === 0 ? "No changes" : `${changes} change${changes === 1 ? "" : "s"} pending`;
+}
+
+async function saveFamArrange(original) {
+  const saveBtn = $("#fam-save");
+  const cancelBtn = $("#fam-cancel");
+  saveBtn.disabled = cancelBtn.disabled = true;
+  saveBtn.textContent = "Saving…";
+
+  // Read desired assignments straight from the DOM.
+  const moves = $$("#view-fams .fam-member").map((card) => ({
+    memberId: card.dataset.id,
+    targetFamId: (card.closest("[data-fam-id]")?.dataset.famId) || "",
+  })).filter((mv) => mv.targetFamId !== (original[mv.memberId] ?? ""));
+
+  try {
+    // Each move mirrors the history-preserving reassignment used by Edit Member:
+    // close the current is_current row, then insert a new current one.
+    for (const mv of moves) {
+      const currentFm = state.famMemberships.find((f) => idEq(f.member_id, mv.memberId) && f.is_current);
+      if (currentFm) {
+        const { error } = await db.from("fam_memberships")
+          .update({ is_current: false }).eq("fam_membership_id", currentFm.fam_membership_id);
+        if (error) throw error;
+      }
+      if (mv.targetFamId) {
+        // Resolve to typed IDs (dataset values are strings; DB IDs may be numeric).
+        const member = state.members.find((x) => idEq(x.member_id, mv.memberId));
+        const fam = state.fams.find((x) => idEq(x.fam_id, mv.targetFamId));
+        const { error } = await db.from("fam_memberships").insert({
+          member_id: member.member_id,
+          fam_id: fam.fam_id,
+          joined_date: todayISO(),
+          fam_role: "member",
+          assignment_method: currentFm ? "transferred" : "selected",
+          is_current: true,
+        });
+        if (error) throw error;
+      }
+    }
+    await loadAll();
+    famArrangeMode = false;
+    toast(`Saved ${moves.length} fam change${moves.length === 1 ? "" : "s"}`, "success");
+    renderFams();
+  } catch (err) {
+    showError(err, "Saving fam changes failed");
+    saveBtn.disabled = cancelBtn.disabled = false;
+    saveBtn.textContent = "Save changes";
+  }
+}
+
 /* =====================================================================
    VIEW: Pending verifications
    ===================================================================== */
+// View-local sort for the pending table. Persists across re-renders (and across
+// verify/reject actions, which re-call renderPending) but resets on reload.
+// Default matches the old behavior: newest submissions first.
+let pendingSort = { key: "paid_date", dir: "desc" };
+
+function sortPending(fees) {
+  const dir = pendingSort.dir === "asc" ? 1 : -1;
+  return fees.slice().sort((a, b) => {
+    if (pendingSort.key === "payment_method") {
+      const cmp = (a.payment_method || "").localeCompare(b.payment_method || "");
+      // Within one method, keep newest-first regardless of sort direction.
+      if (cmp !== 0) return cmp * dir;
+      return (b.paid_date || "").localeCompare(a.paid_date || "");
+    }
+    return (a.paid_date || "").localeCompare(b.paid_date || "") * dir;
+  });
+}
+
 function renderPending() {
   const root = $("#view-pending");
-  const pending = state.membershipFees
-    .filter((f) => f.status === "pending")
-    .sort((a, b) => (b.paid_date || "").localeCompare(a.paid_date || ""));
+  const pending = sortPending(state.membershipFees.filter((f) => f.status === "pending"));
+
+  const arrow = (key) =>
+    pendingSort.key === key
+      ? `<span aria-hidden="true"> ${pendingSort.dir === "asc" ? "▲" : "▼"}</span>`
+      : "";
+  const sortableAttrs = (key) =>
+    `class="sortable" data-sort="${key}" style="cursor:pointer; user-select:none;"`;
 
   root.innerHTML = `
     <div class="view-header">
@@ -1405,8 +1649,8 @@ function renderPending() {
                 <th>Year</th>
                 <th>Plan</th>
                 <th>Amount</th>
-                <th>Method</th>
-                <th>Submitted</th>
+                <th ${sortableAttrs("payment_method")}>Method${arrow("payment_method")}</th>
+                <th ${sortableAttrs("paid_date")}>Submitted${arrow("paid_date")}</th>
                 <th>Screenshot</th>
                 <th></th>
               </tr>
@@ -1422,6 +1666,18 @@ function renderPending() {
     </div>
   `;
 
+  $$("#view-pending th.sortable").forEach((th) => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.sort;
+      if (pendingSort.key === key) {
+        pendingSort.dir = pendingSort.dir === "asc" ? "desc" : "asc";
+      } else {
+        // New column: methods read best A→Z, dates newest-first.
+        pendingSort = { key, dir: key === "paid_date" ? "desc" : "asc" };
+      }
+      renderPending();
+    });
+  });
   $$("#view-pending tbody tr.clickable").forEach((row) => {
     row.addEventListener("click", () => {
       const fee = state.membershipFees.find((f) => idEq(f.fee_id, row.dataset.id));
@@ -1545,6 +1801,8 @@ function renderVerifyForm(f) {
           paid_date: fd.get("paid_date"),
           valid_from: fd.get("valid_from"),
           valid_until: fd.get("valid_until"),
+          verified_at: todayISO(),
+          verification_source: "manual",
         });
       }
       const { error } = await db.from("membership_fees").update(updates).eq("fee_id", f.fee_id);

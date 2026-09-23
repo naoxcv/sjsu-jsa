@@ -44,7 +44,10 @@ CREATE TABLE public.membership_fees (
   valid_until date NOT NULL,
   payment_method character varying DEFAULT 'cash'::character varying CHECK (payment_method::text = ANY (ARRAY['venmo'::character varying, 'zelle'::character varying, 'cash'::character varying]::text[])),
   status character varying NOT NULL DEFAULT 'pending' CHECK (status::text = ANY (ARRAY['pending'::character varying, 'verified'::character varying, 'rejected'::character varying]::text[])),
-  screenshot_url text
+  screenshot_url text,
+  verified_at date,
+  verification_source text CHECK (verification_source IS NULL OR verification_source IN ('auto', 'manual')),
+  auto_match_ref text
 );
 
 -- Single source of truth for prices; one row per plan per academic year.
